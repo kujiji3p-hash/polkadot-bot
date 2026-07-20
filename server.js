@@ -1,5 +1,7 @@
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 // =====================
 // НАСТРОЙКИ
@@ -7,11 +9,35 @@ const https = require('https');
 const BOT_TOKEN = '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
 const CHAT_ID = '814292031';
 const PORT = process.env.PORT || 3001;
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 
 // =====================
-// ДАННЫЕ
+// ДАННЫЕ (с сохранением в файл)
 // =====================
-const orders = [];
+if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+let orders = [];
+try {
+    if (fs.existsSync(ORDERS_FILE)) {
+        orders = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
+        console.log(`Loaded ${orders.length} orders from file`);
+    }
+} catch(e) {
+    console.error('Error loading orders:', e.message);
+    orders = [];
+}
+
+function saveOrders() {
+    try {
+        fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+    } catch(e) {
+        console.error('Error saving orders:', e.message);
+    }
+}
+
 const faqData = [
     { q: 'Какие товары есть?', a: 'У нас верхние формы для наращивания и гели для моделирования ногтей.' },
     { q: 'Сколько стоят формы?', a: 'Арочный квадрат - 100 BYN (скидка с 120 BYN). В наборе 140 форм.' },
@@ -58,6 +84,7 @@ async function sendMessage(chatId, text, options = {}) {
 async function sendOrderToAdmin(data) {
     const orderId = orders.length + 1;
     orders.push({ id: orderId, ...data, status: 'new', date: new Date().toLocaleString('ru-RU') });
+    saveOrders();
 
     const msg = `<b>Новый заказ #${orderId}</b>
 
@@ -175,6 +202,7 @@ async function handleCommand(msg) {
 
 <b>Команды:</b>
 /orders - Список заказов
+/history - История заказов (с пагинацией)
 /status ID СТАТУС - Изменить статус (новый/обработка/отправлен/доставлен)
 /send ID ТЕКСТ - Ответить клиенту
 /broadcast ТЕКСТ - Рассылка всем клиентам
@@ -210,6 +238,7 @@ async function handleCommand(msg) {
             return;
         }
         order.status = status;
+        saveOrders();
         await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${status}</b>`);
 
         // Уведомление клиенту
@@ -287,6 +316,39 @@ async function handleCommand(msg) {
             faqMsg += `${i + 1}. <b>${item.q}</b>\n${item.a}\n\n`;
         });
         await sendMessage(chatId, faqMsg);
+        return;
+    }
+
+    if (cmd === '/history') {
+        const page = parseInt(args[1]) || 1;
+        const perPage = 5;
+        const sorted = [...orders].reverse();
+        const totalPages = Math.ceil(sorted.length / perPage);
+        const start = (page - 1) * perPage;
+        const pageOrders = sorted.slice(start, start + perPage);
+
+        if (pageOrders.length === 0) {
+            await sendMessage(chatId, 'История заказов пуста.');
+            return;
+        }
+
+        let msg = `<b>История заказов (стр. ${page}/${totalPages}):</b>\n\n`;
+        const statusEmoji = { new: 'Новый', processing: 'В обработке', shipped: 'Отправлен', delivered: 'Доставлен' };
+        pageOrders.forEach(o => {
+            msg += `<b>#${o.id}</b> | ${o.date}\n`;
+            msg += `  Клиент: ${o.name} (${o.email || 'нет email'})\n`;
+            msg += `  Товар: ${o.product} x${o.quantity || 1}\n`;
+            msg += `  Телефон: ${o.phone || 'нет'}\n`;
+            msg += `  Статус: ${statusEmoji[o.status] || o.status}\n`;
+            if (o.message) msg += `  Комментарий: ${o.message}\n`;
+            msg += '\n';
+        });
+
+        if (totalPages > 1) {
+            msg += `Для навигации: /history ${page + 1} (следующая)`;
+        }
+
+        await sendMessage(chatId, msg);
         return;
     }
 }
