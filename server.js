@@ -11,6 +11,7 @@ const CHAT_ID = process.env.CHAT_ID || '814292031';
 const PORT = process.env.PORT || 3001;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
 
 if (!BOT_TOKEN || !CHAT_ID) {
     console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
@@ -43,11 +44,30 @@ function saveOrders() {
     }
 }
 
+let questions = [];
+try {
+    if (fs.existsSync(QUESTIONS_FILE)) {
+        questions = JSON.parse(fs.readFileSync(QUESTIONS_FILE, 'utf8'));
+        console.log(`Loaded ${questions.length} questions from file`);
+    }
+} catch(e) {
+    console.error('Error loading questions:', e.message);
+    questions = [];
+}
+
+function saveQuestions() {
+    try {
+        fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(questions, null, 2));
+    } catch(e) {
+        console.error('Error saving questions:', e.message);
+    }
+}
+
 const faqData = [
     { q: 'Какие товары есть?', a: 'У нас верхние формы для наращивания и гели для моделирования ногтей.' },
     { q: 'Сколько стоят формы?', a: 'Арочный квадрат - 100 BYN (скидка с 120 BYN). В наборе 140 форм.' },
     { q: 'Сколько стоит гель?', a: 'Профессиональный гель - 70 BYN (скидка с 500 BYN). Самовыравнивающийся.' },
-    { q: 'Как заказать?', a: 'Оформите заказ на сайте polka-dot-beauty.surge.sh или напишите нам в этот чат.' },
+    { q: 'Как заказать?', a: 'Оформите заказ на сайте polkadot-nails.surge.sh или напишите нам в этот чат.' },
     { q: 'Как доставляете?', a: 'Доставка по Беларуси почтой или курьером. Стоимость рассчитывается индивидуально.' },
     { q: 'Есть обучение?', a: 'Да! Мы проводим курсы по работе с нашими продуктами. Подробности на сайте.' },
 ];
@@ -97,7 +117,7 @@ async function sendOrderToAdmin(data) {
     orders.push({ id: orderId, ...data, status: 'new', date: new Date().toLocaleString('ru-RU') });
     saveOrders();
 
-    const msg = `<b>Новый заказ #${orderId}</b>
+    const msg = `<b>🆕 Новый заказ #${orderId}</b>
 
 <b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
 <b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
@@ -105,15 +125,23 @@ async function sendOrderToAdmin(data) {
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
 <b>Комментарий:</b> ${escapeHtml(data.message) || 'Нет'}
-<b>Статус:</b> Новый
-<b>Дата:</b> ${new Date().toLocaleString('ru-RU')}
+<b>Статус:</b> 🆕 Новый
+<b>Дата:</b> ${new Date().toLocaleString('ru-RU')}`;
 
-<b>Команды:</b>
-/status ${orderId} обработка - изменить статус
-/send ${orderId} текст - ответить клиенту
-/orders - список заказов`;
+    const keyboard = {
+        inline_keyboard: [
+            [
+                { text: '✅ В обработку', callback_data: `status_${orderId}_processing` },
+                { text: '📦 Отправлен', callback_data: `status_${orderId}_shipped` }
+            ],
+            [
+                { text: '🚚 Доставлен', callback_data: `status_${orderId}_delivered` },
+                { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
+            ]
+        ]
+    };
 
-    return sendMessage(CHAT_ID, msg);
+    return sendMessage(CHAT_ID, msg, { reply_markup: JSON.stringify(keyboard) });
 }
 
 function escapeHtml(value) {
@@ -125,21 +153,134 @@ function escapeHtml(value) {
 }
 
 async function sendQuestionToAdmin(data) {
-    const msg = `<b>Новый вопрос</b>
+    const qId = questions.length + 1;
+    questions.push({ id: qId, ...data, status: 'new', date: new Date().toLocaleString('ru-RU') });
+    saveQuestions();
+
+    const topicLabels = {
+        products: 'О продукции',
+        order: 'О заказе',
+        delivery: 'О доставке',
+        training: 'Об обучении',
+        cooperation: 'О сотрудничестве',
+        other: 'Другое'
+    };
+
+    const msg = `<b>❓ Новый вопрос #${qId}</b>
 
 <b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
 <b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
-<b>Тема:</b> ${escapeHtml(data.topic) || 'Не указана'}
+<b>Тема:</b> ${topicLabels[data.topic] || escapeHtml(data.topic) || 'Не указана'}
 <b>Вопрос:</b> ${escapeHtml(data.message) || 'Нет'}
-<b>Дата:</b> ${new Date().toLocaleString('ru-RU')}
+<b>Дата:</b> ${new Date().toLocaleString('ru-RU')}`;
 
-<b>Команда:</b> /reply ${data.email} текст - ответить`;
+    const keyboard = {
+        inline_keyboard: [
+            [
+                { text: '✅ Обработан', callback_data: `qdone_${qId}` },
+                { text: '💬 Ответить', callback_data: `qreply_${qId}` }
+            ]
+        ]
+    };
 
-    return sendMessage(CHAT_ID, msg);
+    return sendMessage(CHAT_ID, msg, { reply_markup: JSON.stringify(keyboard) });
 }
 
 async function sendAutoReply(chatId, text) {
     return sendMessage(chatId, text);
+}
+
+// =====================
+// ОБРАБОТКА CALLBACK-КНОПОК
+// =====================
+const STATUS_LABELS = {
+    new: '🆕 Новый',
+    processing: '⚙️ В обработке',
+    shipped: '📦 Отправлен',
+    delivered: '🚚 Доставлен',
+    cancelled: '❌ Отменён'
+};
+
+async function handleCallbackQuery(callbackQuery) {
+    const chatId = callbackQuery.message.chat.id;
+    const data = callbackQuery.data;
+
+    if (chatId.toString() !== CHAT_ID) return;
+
+    if (data.startsWith('status_')) {
+        const parts = data.split('_');
+        const orderId = parseInt(parts[1]);
+        const newStatus = parts[2];
+
+        const order = orders.find(o => o.id === orderId);
+        if (!order) {
+            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} не найден` });
+            return;
+        }
+
+        order.status = newStatus;
+        saveOrders();
+
+        const statusLabel = STATUS_LABELS[newStatus] || newStatus;
+        await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} → ${statusLabel}` });
+
+        // Update the message with new status
+        const updatedMsg = `<b>📋 Заказ #${orderId}</b>
+
+<b>Имя:</b> ${escapeHtml(order.name) || 'Не указано'}
+<b>Email:</b> ${escapeHtml(order.email) || 'Не указано'}
+<b>Телефон:</b> ${escapeHtml(order.phone) || 'Не указано'}
+<b>Товар:</b> ${escapeHtml(order.product) || 'Не указано'}
+<b>Количество:</b> ${escapeHtml(order.quantity) || '1'}
+<b>Комментарий:</b> ${escapeHtml(order.message) || 'Нет'}
+<b>Статус:</b> ${statusLabel}
+<b>Дата:</b> ${order.date}`;
+
+        await telegramAPI('editMessageText', {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id,
+            text: updatedMsg,
+            parse_mode: 'HTML'
+        });
+    }
+
+    if (data.startsWith('qdone_')) {
+        const qId = parseInt(data.split('_')[1]);
+        const question = questions.find(q => q.id === qId);
+        if (!question) {
+            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
+            return;
+        }
+        question.status = 'done';
+        saveQuestions();
+        await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} отмечен как обработанный` });
+
+        const updatedMsg = `<b>✅ Вопрос #${qId} (обработан)</b>
+
+<b>Имя:</b> ${escapeHtml(question.name) || 'Не указано'}
+<b>Email:</b> ${escapeHtml(question.email) || 'Не указано'}
+<b>Тема:</b> ${escapeHtml(question.topic) || 'Не указана'}
+<b>Вопрос:</b> ${escapeHtml(question.message) || 'Нет'}
+<b>Дата:</b> ${question.date}`;
+
+        await telegramAPI('editMessageText', {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id,
+            text: updatedMsg,
+            parse_mode: 'HTML'
+        });
+    }
+
+    if (data.startsWith('qreply_')) {
+        const qId = parseInt(data.split('_')[1]);
+        const question = questions.find(q => q.id === qId);
+        if (!question) {
+            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
+            return;
+        }
+        await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Используйте: /qreply ${qId} текст` });
+        await sendMessage(chatId, `Для ответа на вопрос #${qId} используйте:\n<code>/qreply ${qId} текст ответа</code>`);
+    }
 }
 
 // =====================
@@ -191,7 +332,7 @@ async function handleCommand(msg) {
 
         if (cmd === '/order') {
             await sendMessage(chatId, `Для оформления заказа:
-1. Зайдите на сайт polka-dot-beauty.surge.sh
+1. Зайдите на сайт polkadot-nails.surge.sh
 2. Выберите товары в каталоге
 3. Добавьте в корзину
 4. Оформите заказ
@@ -217,16 +358,24 @@ async function handleCommand(msg) {
 
     // Команды админа
     if (cmd === '/start') {
-        await sendMessage(chatId, `<b>Панель управления Polka Dot</b>
+        await sendMessage(chatId, `<b>📋 Панель управления Polka Dot</b>
 
-<b>Команды:</b>
-/orders - Список заказов
-/history - История заказов (с пагинацией)
-/status ID СТАТУС - Изменить статус (новый/обработка/отправлен/доставлен)
-/send ID ТЕКСТ - Ответить клиенту
-/broadcast ТЕКСТ - Рассылка всем клиентам
-/faq - Часто задаваемые вопросы
-/stats - Статистика`);
+<b>Заказы:</b>
+/orders — Все заказы
+/neworders — Только новые
+/history — История заказов
+/status ID СТАТУС — Изменить статус
+/send ID ТЕКСТ — Ответить клиенту
+
+<b>Вопросы:</b>
+/questions — Все вопросы
+/newquestions — Только новые
+/qreply ID ТЕКСТ — Ответить на вопрос
+
+<b>Общее:</b>
+/broadcast ТЕКСТ — Рассылка всем
+/faq — Вопросы-ответы
+/stats — Статистика`);
         return;
     }
 
@@ -235,10 +384,27 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Заказов пока нет.');
             return;
         }
-        let msg = '<b>Список заказов:</b>\n\n';
-        orders.slice(-10).forEach(o => {
-            const statusEmoji = { new: 'Новый', processing: 'В обработке', shipped: 'Отправлен', delivered: 'Доставлен' };
-            msg += `<b>#${o.id}</b> - ${o.name} - ${o.product} - ${statusEmoji[o.status] || o.status}\n`;
+        let msg = '<b>📋 Все заказы:</b>\n\n';
+        orders.slice(-15).forEach(o => {
+            const statusLabel = STATUS_LABELS[o.status] || o.status;
+            msg += `<b>#${o.id}</b> | ${o.name} | ${o.product} | ${statusLabel}\n`;
+        });
+        msg += `\nВсего: ${orders.length} заказов`;
+        await sendMessage(chatId, msg);
+        return;
+    }
+
+    if (cmd === '/neworders') {
+        const newOrders = orders.filter(o => o.status === 'new' || o.status === 'processing');
+        if (newOrders.length === 0) {
+            await sendMessage(chatId, '✅ Нет необработанных заказов!');
+            return;
+        }
+        let msg = `<b>🔔 Необработанные заказы (${newOrders.length}):</b>\n\n`;
+        newOrders.forEach(o => {
+            const statusLabel = STATUS_LABELS[o.status] || o.status;
+            msg += `<b>#${o.id}</b> | ${o.name} | ${o.product} | ${statusLabel}\n`;
+            msg += `  📞 ${o.phone || 'нет'} | 📧 ${o.email || 'нет'}\n\n`;
         });
         await sendMessage(chatId, msg);
         return;
@@ -248,7 +414,7 @@ async function handleCommand(msg) {
         const orderId = parseInt(args[1]);
         const status = args[2];
         if (!orderId || !status) {
-            await sendMessage(chatId, 'Использование: /status НОМЕР СТАТУС\nСтатусы: новый, обработка, отправлен, доставлен');
+            await sendMessage(chatId, 'Использование: /status НОМЕР СТАТУС\nСтатусы: новый, обработка, отправлен, доставлен, отменён');
             return;
         }
         const order = orders.find(o => o.id === orderId);
@@ -258,15 +424,17 @@ async function handleCommand(msg) {
         }
         order.status = status;
         saveOrders();
-        await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${status}</b>`);
+        const statusLabel = STATUS_LABELS[status] || status;
+        await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${statusLabel}</b>`);
 
         // Уведомление клиенту
         if (order.chatId) {
             const statusMessages = {
                 new: 'Ваш заказ принят и ожидает обработки.',
-                processing: 'Ваш заказ正在 обрабатывается.',
+                processing: 'Ваш заказ обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
-                delivered: 'Ваш заказ доставлен. Спасибо за покупку!'
+                delivered: 'Ваш заказ доставлен. Спасибо за покупку!',
+                cancelled: 'Ваш заказ отменён.'
             };
             await sendMessage(order.chatId, `Статус вашего заказа #${orderId}: ${statusMessages[status] || status}`);
         }
@@ -351,14 +519,14 @@ async function handleCommand(msg) {
             return;
         }
 
-        let msg = `<b>История заказов (стр. ${page}/${totalPages}):</b>\n\n`;
-        const statusEmoji = { new: 'Новый', processing: 'В обработке', shipped: 'Отправлен', delivered: 'Доставлен' };
+        let msg = `<b>📜 История заказов (стр. ${page}/${totalPages}):</b>\n\n`;
         pageOrders.forEach(o => {
+            const statusLabel = STATUS_LABELS[o.status] || o.status;
             msg += `<b>#${o.id}</b> | ${o.date}\n`;
             msg += `  Клиент: ${o.name} (${o.email || 'нет email'})\n`;
             msg += `  Товар: ${o.product} x${o.quantity || 1}\n`;
             msg += `  Телефон: ${o.phone || 'нет'}\n`;
-            msg += `  Статус: ${statusEmoji[o.status] || o.status}\n`;
+            msg += `  Статус: ${statusLabel}\n`;
             if (o.message) msg += `  Комментарий: ${o.message}\n`;
             msg += '\n';
         });
@@ -368,6 +536,56 @@ async function handleCommand(msg) {
         }
 
         await sendMessage(chatId, msg);
+        return;
+    }
+
+    if (cmd === '/questions') {
+        if (questions.length === 0) {
+            await sendMessage(chatId, 'Вопросов пока нет.');
+            return;
+        }
+        let msg = '<b>❓ Все вопросы:</b>\n\n';
+        questions.slice(-15).forEach(q => {
+            const statusLabel = q.status === 'done' ? '✅ Обработан' : '🆕 Новый';
+            msg += `<b>#${q.id}</b> | ${q.name} | ${q.topic || 'без темы'} | ${statusLabel}\n`;
+        });
+        msg += `\nВсего: ${questions.length} вопросов`;
+        await sendMessage(chatId, msg);
+        return;
+    }
+
+    if (cmd === '/newquestions') {
+        const newQuestions = questions.filter(q => q.status !== 'done');
+        if (newQuestions.length === 0) {
+            await sendMessage(chatId, '✅ Нет необработанных вопросов!');
+            return;
+        }
+        let msg = `<b>🔔 Необработанные вопросы (${newQuestions.length}):</b>\n\n`;
+        newQuestions.forEach(q => {
+            msg += `<b>#${q.id}</b> | ${q.name} | ${q.email || 'нет email'}\n`;
+            msg += `  Тема: ${q.topic || 'нет'}\n`;
+            msg += `  Вопрос: ${q.message || 'нет'}\n\n`;
+        });
+        await sendMessage(chatId, msg);
+        return;
+    }
+
+    if (cmd === '/qreply') {
+        const qId = parseInt(args[1]);
+        const replyText = args.slice(2).join(' ');
+        if (!qId || !replyText) {
+            await sendMessage(chatId, 'Использование: /qreply ID ТЕКСТ');
+            return;
+        }
+        const question = questions.find(q => q.id === qId);
+        if (!question) {
+            await sendMessage(chatId, `Вопрос #${qId} не найден.`);
+            return;
+        }
+        // Mark as done
+        question.status = 'done';
+        saveQuestions();
+        await sendMessage(chatId, `✅ Вопрос #${qId} отмечен как обработанный.\nОтвет: ${replyText}`);
         return;
     }
 }
@@ -382,7 +600,7 @@ async function pollUpdates() {
         const result = await telegramAPI('getUpdates', {
             offset: lastUpdateId + 1,
             timeout: 30,
-            allowed_updates: ['message']
+            allowed_updates: ['message', 'callback_query']
         });
 
         if (result.ok && result.result) {
@@ -390,6 +608,9 @@ async function pollUpdates() {
                 lastUpdateId = update.update_id;
                 if (update.message) {
                     await handleCommand(update.message);
+                }
+                if (update.callback_query) {
+                    await handleCallbackQuery(update.callback_query);
                 }
             }
         }
