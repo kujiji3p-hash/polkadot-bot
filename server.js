@@ -4,13 +4,18 @@ const fs = require('fs');
 const path = require('path');
 
 // =====================
-// НАСТРОЙКИ
+// НАСТРОЙКИ (секреты — через env на хостинге)
 // =====================
-const BOT_TOKEN = '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
-const CHAT_ID = '814292031';
+const BOT_TOKEN = process.env.BOT_TOKEN || '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
+const CHAT_ID = process.env.CHAT_ID || '814292031';
 const PORT = process.env.PORT || 3001;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+
+if (!BOT_TOKEN || !CHAT_ID) {
+    console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
+    process.exit(1);
+}
 
 // =====================
 // ДАННЫЕ (с сохранением в файл)
@@ -78,7 +83,13 @@ function telegramAPI(method, data) {
 }
 
 async function sendMessage(chatId, text, options = {}) {
-    return telegramAPI('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...options });
+    const result = await telegramAPI('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...options });
+    if (!result || result.ok === false) {
+        const errMsg = (result && result.description) || 'Telegram sendMessage failed';
+        console.error('Telegram error:', errMsg, result);
+        throw new Error(errMsg);
+    }
+    return result;
 }
 
 async function sendOrderToAdmin(data) {
@@ -88,12 +99,12 @@ async function sendOrderToAdmin(data) {
 
     const msg = `<b>Новый заказ #${orderId}</b>
 
-<b>Имя:</b> ${data.name || 'Не указано'}
-<b>Email:</b> ${data.email || 'Не указано'}
-<b>Телефон:</b> ${data.phone || 'Не указано'}
-<b>Товар:</b> ${data.product || 'Не указано'}
-<b>Количество:</b> ${data.quantity || '1'}
-<b>Комментарий:</b> ${data.message || 'Нет'}
+<b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
+<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
+<b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указано'}
+<b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
+<b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
+<b>Комментарий:</b> ${escapeHtml(data.message) || 'Нет'}
 <b>Статус:</b> Новый
 <b>Дата:</b> ${new Date().toLocaleString('ru-RU')}
 
@@ -105,13 +116,21 @@ async function sendOrderToAdmin(data) {
     return sendMessage(CHAT_ID, msg);
 }
 
+function escapeHtml(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 async function sendQuestionToAdmin(data) {
     const msg = `<b>Новый вопрос</b>
 
-<b>Имя:</b> ${data.name || 'Не указано'}
-<b>Email:</b> ${data.email || 'Не указано'}
-<b>Тема:</b> ${data.topic || 'Не указана'}
-<b>Вопрос:</b> ${data.message || 'Нет'}
+<b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
+<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
+<b>Тема:</b> ${escapeHtml(data.topic) || 'Не указана'}
+<b>Вопрос:</b> ${escapeHtml(data.message) || 'Нет'}
 <b>Дата:</b> ${new Date().toLocaleString('ru-RU')}
 
 <b>Команда:</b> /reply ${data.email} текст - ответить`;

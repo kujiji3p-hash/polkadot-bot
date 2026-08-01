@@ -1,0 +1,9 @@
+node_modules
+data
+*.log
+.git
+.gitignore
+DEPLOY.bat
+start.bat
+INSTRUCTION.txt
+README.md

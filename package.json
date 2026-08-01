@@ -1,9 +1,12 @@
 {
   "name": "polkadot-order-bot",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Telegram bot for Polka Dot orders",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
