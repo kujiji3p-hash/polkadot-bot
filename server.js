@@ -708,11 +708,11 @@ const server = http.createServer(async (req, res) => {
 // =====================
 // ЗАПУСК
 // =====================
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`
 ╔══════════════════════════════════════════════════╗
 ║   Polka Dot Bot Server v2.0                     ║
-║   Running on http://localhost:${PORT}              ║
+║   Running on http://0.0.0.0:${PORT}               ║
 ╠══════════════════════════════════════════════════╣
 ║   API Endpoints:                                ║
 ║   POST /api/order    - Новый заказ              ║
