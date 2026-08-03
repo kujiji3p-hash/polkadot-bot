@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 // =====================
 // НАСТРОЙКИ (секреты — через env на хостинге)
@@ -13,9 +14,43 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
 
+// Настройки почты (Gmail)
+const EMAIL_USER = process.env.EMAIL_USER || 'polkadot.nails.shop@gmail.com';
+const EMAIL_PASS = process.env.EMAIL_PASS || 'ваш_пароль_приложения';
+
 if (!BOT_TOKEN || !CHAT_ID) {
     console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
     process.exit(1);
+}
+
+// Настройка почтового транспорта
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    }
+});
+
+// Функция отправки email
+async function sendEmail(to, subject, html) {
+    if (!to || !EMAIL_USER || EMAIL_PASS === 'ваш_пароль_приложения') {
+        console.log('Email не настроен или адрес не указан');
+        return false;
+    }
+    try {
+        await transporter.sendMail({
+            from: `"Polka Dot" <${EMAIL_USER}>`,
+            to,
+            subject,
+            html
+        });
+        console.log(`Email отправлен на ${to}`);
+        return true;
+    } catch(e) {
+        console.error('Ошибка отправки email:', e.message);
+        return false;
+    }
 }
 
 // =====================
@@ -236,12 +271,43 @@ async function handleCallbackQuery(callbackQuery) {
 <b>Статус:</b> ${statusLabel}
 <b>Дата:</b> ${order.date}`;
 
+        // Keep remaining buttons (remove pressed one)
+        const allButtons = [
+            { text: '✅ В обработку', callback_data: `status_${orderId}_processing` },
+            { text: '📦 Отправлен', callback_data: `status_${orderId}_shipped` },
+            { text: '🚚 Доставлен', callback_data: `status_${orderId}_delivered` },
+            { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
+        ];
+        const remainingButtons = allButtons.filter(b => !b.callback_data.endsWith(`_${newStatus}`));
+        const keyboard = { inline_keyboard: [remainingButtons] };
+
         await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: callbackQuery.message.message_id,
             text: updatedMsg,
-            parse_mode: 'HTML'
+            parse_mode: 'HTML',
+            reply_markup: JSON.stringify(keyboard)
         });
+
+        // Send email notification to client
+        if (order.email) {
+            const statusMessages = {
+                processing: 'Ваш заказ принят и обрабатывается.',
+                shipped: 'Ваш заказ отправлен!',
+                delivered: 'Ваш заказ доставлен. Спасибо за покупку!',
+                cancelled: 'Ваш заказ отменён.'
+            };
+            const emailHtml = `
+                <h2>Обновление заказа #${orderId}</h2>
+                <p>${statusMessages[newStatus] || `Статус изменён: ${statusLabel}`}</p>
+                <hr>
+                <p><b>Товар:</b> ${order.product}</p>
+                <p><b>Сумма:</b> ${order.message ? order.message.match(/Итого: (\d+ BYN)/)?.[1] || '' : ''}</p>
+                <br>
+                <p>С уважением, Polka Dot</p>
+            `;
+            await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+        }
     }
 
     if (data.startsWith('qdone_')) {
@@ -263,11 +329,19 @@ async function handleCallbackQuery(callbackQuery) {
 <b>Вопрос:</b> ${escapeHtml(question.message) || 'Нет'}
 <b>Дата:</b> ${question.date}`;
 
+        // Keep reply button
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '💬 Ответить', callback_data: `qreply_${qId}` }]
+            ]
+        };
+
         await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: callbackQuery.message.message_id,
             text: updatedMsg,
-            parse_mode: 'HTML'
+            parse_mode: 'HTML',
+            reply_markup: JSON.stringify(keyboard)
         });
     }
 
@@ -427,8 +501,8 @@ async function handleCommand(msg) {
         const statusLabel = STATUS_LABELS[status] || status;
         await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${statusLabel}</b>`);
 
-        // Уведомление клиенту
-        if (order.chatId) {
+        // Send email notification to client
+        if (order.email) {
             const statusMessages = {
                 new: 'Ваш заказ принят и ожидает обработки.',
                 processing: 'Ваш заказ обрабатывается.',
@@ -436,7 +510,15 @@ async function handleCommand(msg) {
                 delivered: 'Ваш заказ доставлен. Спасибо за покупку!',
                 cancelled: 'Ваш заказ отменён.'
             };
-            await sendMessage(order.chatId, `Статус вашего заказа #${orderId}: ${statusMessages[status] || status}`);
+            const emailHtml = `
+                <h2>Обновление заказа #${orderId}</h2>
+                <p>${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
+                <hr>
+                <p><b>Товар:</b> ${order.product}</p>
+                <br>
+                <p>С уважением, Polka Dot</p>
+            `;
+            await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
         }
         return;
     }
@@ -585,7 +667,23 @@ async function handleCommand(msg) {
         // Mark as done
         question.status = 'done';
         saveQuestions();
-        await sendMessage(chatId, `✅ Вопрос #${qId} отмечен как обработанный.\nОтвет: ${replyText}`);
+
+        // Send email to client
+        if (question.email) {
+            const emailHtml = `
+                <h2>Ответ на ваш вопрос</h2>
+                <p><b>Ваш вопрос:</b> ${escapeHtml(question.message)}</p>
+                <hr>
+                <p><b>Ответ:</b></p>
+                <p>${escapeHtml(replyText)}</p>
+                <br>
+                <p>С уважением, Polka Dot</p>
+            `;
+            await sendEmail(question.email, 'Ответ на ваш вопрос - Polka Dot', emailHtml);
+            await sendMessage(chatId, `✅ Вопрос #${qId} обработан. Ответ отправлен на ${question.email}`);
+        } else {
+            await sendMessage(chatId, `✅ Вопрос #${qId} обработан. Email не указан.`);
+        }
         return;
     }
 }
