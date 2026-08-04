@@ -22,6 +22,36 @@ if (!BOT_TOKEN || !CHAT_ID) {
     process.exit(1);
 }
 
+// Функция добавления контакта в Brevo
+async function addBrevoContact(email) {
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({ email: email, listIds: [] });
+        const options = {
+            hostname: 'api.brevo.com',
+            port: 443,
+            path: '/v3/contacts',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': BREVO_API_KEY,
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                console.log(`[EMAIL] Контакт ${email}: ${res.statusCode}`);
+                resolve(res.statusCode === 201 || res.statusCode === 204);
+            });
+        });
+        req.on('error', () => resolve(false));
+        req.setTimeout(10000, () => { req.destroy(); resolve(false); });
+        req.write(postData);
+        req.end();
+    });
+}
+
 // Функция отправки email через Brevo HTTP API
 async function sendEmail(to, subject, html) {
     console.log(`[EMAIL] Попытка отправки на ${to}`);
@@ -34,6 +64,9 @@ async function sendEmail(to, subject, html) {
         console.log('[EMAIL] Brevo API ключ не настроен');
         return false;
     }
+    
+    // Сначала добавляем контакт
+    await addBrevoContact(to);
     
     return new Promise((resolve) => {
         const postData = JSON.stringify({
