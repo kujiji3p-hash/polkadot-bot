@@ -33,36 +33,6 @@ writeLog(`=== SERVER STARTED ===`);
 writeLog(`EMAIL_FROM=${EMAIL_FROM}`);
 writeLog(`BREVO_API_KEY=${BREVO_API_KEY ? BREVO_API_KEY.substring(0,10) + '...' : 'EMPTY'}`);
 
-// Функция добавления контакта в Brevo
-async function addBrevoContact(email) {
-    return new Promise((resolve) => {
-        const postData = JSON.stringify({ email: email, listIds: [] });
-        const options = {
-            hostname: 'api.brevo.com',
-            port: 443,
-            path: '/v3/contacts',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api-key': BREVO_API_KEY,
-                'Content-Length': Buffer.byteLength(postData)
-            }
-        };
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                console.log(`[EMAIL] Контакт ${email}: ${res.statusCode}`);
-                resolve(res.statusCode === 201 || res.statusCode === 204);
-            });
-        });
-        req.on('error', () => resolve(false));
-        req.setTimeout(10000, () => { req.destroy(); resolve(false); });
-        req.write(postData);
-        req.end();
-    });
-}
-
 // Функция отправки email через Brevo HTTP API
 async function sendEmail(to, subject, html) {
     writeLog(`[EMAIL] Попытка отправки на ${to}, от ${EMAIL_FROM}`);
@@ -76,11 +46,6 @@ async function sendEmail(to, subject, html) {
         return false;
     }
     
-    // Сначала добавляем контакт
-    writeLog(`[EMAIL] Добавление контакта ${to} в Brevo...`);
-    const contactResult = await addBrevoContact(to);
-    writeLog(`[EMAIL] Контакт результат: ${contactResult}`);
-    
     return new Promise((resolve) => {
         const postData = JSON.stringify({
             sender: { name: 'Polka Dot', email: EMAIL_FROM },
@@ -89,7 +54,7 @@ async function sendEmail(to, subject, html) {
             htmlContent: html
         });
 
-        writeLog(`[EMAIL] Отправка запроса в Brevo API...`);
+        writeLog(`[EMAIL] Отправка в Brevo...`);
 
         const options = {
             hostname: 'api.brevo.com',
@@ -107,11 +72,10 @@ async function sendEmail(to, subject, html) {
             let body = '';
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
+                writeLog(`[EMAIL] Brevo ответ: ${res.statusCode} ${body}`);
                 if (res.statusCode === 201) {
-                    writeLog(`[EMAIL] УСПЕХ! Статус: ${res.statusCode}, ID: ${body.messageId || 'N/A'}`);
                     resolve(true);
                 } else {
-                    writeLog(`[EMAIL] ОШИБКА ${res.statusCode}: ${body}`);
                     resolve(false);
                 }
             });
@@ -888,6 +852,18 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(500, { 'Content-Type': 'text/plain' });
             res.end('Error reading logs: ' + e.message);
         }
+        return;
+    }
+
+    // Тест email
+    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const testEmail = url.searchParams.get('to') || 'kujiji3p@gmail.com';
+        writeLog(`[TEST] Запуск теста email на ${testEmail}`);
+        const result = await sendEmail(testEmail, 'Тест Polka Dot', '<h1>Тест</h1><p>Если вы это видите — email работает!</p>');
+        writeLog(`[TEST] Результат: ${result}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sent: result, to: testEmail, from: EMAIL_FROM }));
         return;
     }
 
