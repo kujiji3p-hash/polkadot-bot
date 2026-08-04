@@ -22,6 +22,17 @@ if (!BOT_TOKEN || !CHAT_ID) {
     process.exit(1);
 }
 
+// Логирование в файл
+const LOG_PATH = path.join(__dirname, 'debug.log');
+function writeLog(msg) {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    console.log(line.trim());
+    try { fs.appendFileSync(LOG_PATH, line); } catch(e) {}
+}
+writeLog(`=== SERVER STARTED ===`);
+writeLog(`EMAIL_FROM=${EMAIL_FROM}`);
+writeLog(`BREVO_API_KEY=${BREVO_API_KEY ? BREVO_API_KEY.substring(0,10) + '...' : 'EMPTY'}`);
+
 // Функция добавления контакта в Brevo
 async function addBrevoContact(email) {
     return new Promise((resolve) => {
@@ -54,19 +65,21 @@ async function addBrevoContact(email) {
 
 // Функция отправки email через Brevo HTTP API
 async function sendEmail(to, subject, html) {
-    console.log(`[EMAIL] Попытка отправки на ${to}`);
+    writeLog(`[EMAIL] Попытка отправки на ${to}, от ${EMAIL_FROM}`);
     
     if (!to) {
-        console.log('[EMAIL] Адрес получателя не указан');
+        writeLog('[EMAIL] SKIP: Адрес получателя не указан');
         return false;
     }
     if (!BREVO_API_KEY) {
-        console.log('[EMAIL] Brevo API ключ не настроен');
+        writeLog('[EMAIL] SKIP: Brevo API ключ не настроен');
         return false;
     }
     
     // Сначала добавляем контакт
-    await addBrevoContact(to);
+    writeLog(`[EMAIL] Добавление контакта ${to} в Brevo...`);
+    const contactResult = await addBrevoContact(to);
+    writeLog(`[EMAIL] Контакт результат: ${contactResult}`);
     
     return new Promise((resolve) => {
         const postData = JSON.stringify({
@@ -75,6 +88,8 @@ async function sendEmail(to, subject, html) {
             subject: subject,
             htmlContent: html
         });
+
+        writeLog(`[EMAIL] Отправка запроса в Brevo API...`);
 
         const options = {
             hostname: 'api.brevo.com',
@@ -93,23 +108,23 @@ async function sendEmail(to, subject, html) {
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
                 if (res.statusCode === 201) {
-                    console.log(`[EMAIL] Успешно!`);
+                    writeLog(`[EMAIL] УСПЕХ! Статус: ${res.statusCode}, ID: ${body.messageId || 'N/A'}`);
                     resolve(true);
                 } else {
-                    console.error(`[EMAIL] ОШИБКА ${res.statusCode}: ${body}`);
+                    writeLog(`[EMAIL] ОШИБКА ${res.statusCode}: ${body}`);
                     resolve(false);
                 }
             });
         });
         
         req.on('error', (e) => {
-            console.error('[EMAIL] ОШИБКА:', e.message);
+            writeLog(`[EMAIL] ОШИБКА СЕТИ: ${e.message}`);
             resolve(false);
         });
         
         req.setTimeout(15000, () => {
             req.destroy();
-            console.error('[EMAIL] Timeout');
+            writeLog(`[EMAIL] TIMEOUT`);
             resolve(false);
         });
         
@@ -339,7 +354,7 @@ async function handleCallbackQuery(callbackQuery) {
         const order = getOrderById(orderId);
         const orderEmail = order ? (order.email || '') : '';
         const orderProduct = order ? (order.product || '') : '';
-        console.log(`[STATUS] Заказ #${orderId}, email из БД: '${orderEmail}', product: '${orderProduct}'`);
+        writeLog(`[STATUS] Заказ #${orderId}, email из БД: '${orderEmail}', product: '${orderProduct}', order exists: ${!!order}`);
 
         // Update the message with new status
         const originalText = callbackQuery.message.text || callbackQuery.message.caption || '';
@@ -370,7 +385,7 @@ async function handleCallbackQuery(callbackQuery) {
         updateOrderStatus(orderId, newStatus);
 
         // Send email notification
-        console.log(`[STATUS] Заказ #${orderId}, email: '${orderEmail}', статус: ${newStatus}, email length: ${orderEmail.length}`);
+        writeLog(`[STATUS] Проверка email для заказа #${orderId}: '${orderEmail}', длина: ${orderEmail.length}, есть @: ${orderEmail.includes('@')}`);
         if (orderEmail && orderEmail.length > 3 && orderEmail.includes('@')) {
             const statusMessages = {
                 processing: 'Ваш заказ принят и обрабатывается.',
@@ -394,9 +409,9 @@ async function handleCallbackQuery(callbackQuery) {
                     </div>
                 </div>`;
             const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
-            console.log(`[STATUS] Email результат: ${emailSent}`);
+            writeLog(`[STATUS] Email результат для заказа #${orderId}: ${emailSent}`);
         } else {
-            console.log(`[STATUS] Email не указан для заказа #${orderId}, уведомление не отправлено`);
+            writeLog(`[STATUS] Email НЕ отправлен для заказа #${orderId}: email='${orderEmail}'`);
         }
     }
 
@@ -860,6 +875,31 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/api/orders') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ orders: getOrders() }));
+        return;
+    }
+
+    // Чтение логов
+    if (req.method === 'GET' && req.url === '/api/logs') {
+        try {
+            const logs = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf-8') : 'No logs yet';
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(logs);
+        } catch(e) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Error reading logs: ' + e.message);
+        }
+        return;
+    }
+
+    // Тест email
+    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const testEmail = url.searchParams.get('to') || 'kujiji3p@gmail.com';
+        writeLog(`[TEST] Запуск теста email на ${testEmail}`);
+        const result = await sendEmail(testEmail, 'Тест Polka Dot', '<h1>Тест</h1><p>Если вы это видите — email работает!</p>');
+        writeLog(`[TEST] Результат: ${result}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sent: result, to: testEmail, from: EMAIL_FROM, apiKeySet: !!BREVO_API_KEY }));
         return;
     }
 
