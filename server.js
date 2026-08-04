@@ -362,9 +362,9 @@ async function handleCallbackQuery(callbackQuery) {
                 <head><meta charset="utf-8"></head>
                 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
                     <div style="max-width:600px;margin:0 auto;background:#fff;">
-                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
-                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
-                            <p style="margin:6px 0 0;font-size:13px;opacity:0.7;">Профессиональные инструменты для маникюра</p>
+                        <div style="background:#fff;padding:32px 24px;text-align:center;background-image:radial-gradient(circle,#2D4A22 1px,transparent 1px);background-size:20px 20px;">
+                            <h1 style="margin:0;font-size:24px;letter-spacing:2px;color:#2D4A22;background:#fff;display:inline-block;padding:8px 24px;">POLKA DOT</h1>
+                            <p style="margin:8px 0 0;font-size:13px;color:#666;">Профессиональные инструменты для маникюра</p>
                         </div>
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
@@ -422,8 +422,8 @@ async function handleCallbackQuery(callbackQuery) {
                 <head><meta charset="utf-8"></head>
                 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
                     <div style="max-width:600px;margin:0 auto;background:#fff;">
-                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
-                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        <div style="background:#fff;padding:32px 24px;text-align:center;background-image:radial-gradient(circle,#2D4A22 1px,transparent 1px);background-size:20px 20px;">
+                            <h1 style="margin:0;font-size:24px;letter-spacing:2px;color:#2D4A22;background:#fff;display:inline-block;padding:8px 24px;">POLKA DOT</h1>
                         </div>
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
@@ -608,9 +608,9 @@ async function handleCommand(msg) {
                 <head><meta charset="utf-8"></head>
                 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
                     <div style="max-width:600px;margin:0 auto;background:#fff;">
-                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
-                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
-                            <p style="margin:6px 0 0;font-size:13px;opacity:0.7;">Профессиональные инструменты для маникюра</p>
+                        <div style="background:#fff;padding:32px 24px;text-align:center;background-image:radial-gradient(circle,#2D4A22 1px,transparent 1px);background-size:20px 20px;">
+                            <h1 style="margin:0;font-size:24px;letter-spacing:2px;color:#2D4A22;background:#fff;display:inline-block;padding:8px 24px;">POLKA DOT</h1>
+                            <p style="margin:8px 0 0;font-size:13px;color:#666;">Профессиональные инструменты для маникюра</p>
                         </div>
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
@@ -787,8 +787,8 @@ async function handleCommand(msg) {
                 <head><meta charset="utf-8"></head>
                 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
                     <div style="max-width:600px;margin:0 auto;background:#fff;">
-                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
-                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        <div style="background:#fff;padding:32px 24px;text-align:center;background-image:radial-gradient(circle,#2D4A22 1px,transparent 1px);background-size:20px 20px;">
+                            <h1 style="margin:0;font-size:24px;letter-spacing:2px;color:#2D4A22;background:#fff;display:inline-block;padding:8px 24px;">POLKA DOT</h1>
                         </div>
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
