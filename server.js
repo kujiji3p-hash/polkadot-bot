@@ -863,6 +863,17 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Тест отправки email (для отладки)
+    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const testEmail = url.searchParams.get('to') || 'test@example.com';
+        console.log(`[TEST] Отправка тестового email на ${testEmail}`);
+        const result = await sendEmail(testEmail, 'Тест Polka Dot', '<p>Тестовое письмо от Polka Dot Bot</p>');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sent: result, to: testEmail }));
+        return;
+    }
+
     res.writeHead(404);
     res.end('Not found');
 });
