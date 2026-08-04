@@ -841,6 +841,28 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Логи
+    if (req.method === 'GET' && req.url === '/api/logs') {
+        try {
+            const logs = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf-8') : 'No logs';
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(logs);
+        } catch(e) { res.writeHead(500); res.end(e.message); }
+        return;
+    }
+
+    // Тест email
+    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const to = url.searchParams.get('to') || 'kujiji3p@gmail.com';
+        writeLog(`[TEST] Отправка на ${to}`);
+        const result = await sendEmail(to, 'Тест Polka Dot', '<h1>Тест</h1><p>Если видите — работает!</p>');
+        writeLog(`[TEST] Результат: ${result}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sent: result, to, from: EMAIL_FROM, keySet: !!SENDGRID_API_KEY }));
+        return;
+    }
+
     res.writeHead(404);
     res.end('Not found');
 });
