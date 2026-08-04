@@ -373,7 +373,7 @@ async function handleCallbackQuery(callbackQuery) {
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(orderProduct)}</td></tr>
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
                             </table>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, ответьте на это письмо или напишите нам в Telegram: @polkadot_beauty_bot</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot.nails@yandex.ru</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
@@ -619,7 +619,7 @@ async function handleCommand(msg) {
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(order.product)}</td></tr>
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
                             </table>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, ответьте на это письмо или напишите нам в Telegram: @polkadot_beauty_bot</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot.nails@yandex.ru</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
