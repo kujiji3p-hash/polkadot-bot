@@ -14,9 +14,9 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
 
-// Настройки почты (Gmail)
-const EMAIL_USER = process.env.EMAIL_USER || 'polkadot.nails.shop@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASS || 'ваш_пароль_приложения';
+// Настройки почты (Yandex)
+const EMAIL_USER = process.env.EMAIL_USER || 'polkadot.nails@yandex.ru';
+const EMAIL_PASS = process.env.EMAIL_PASS || 'polkadot101010';
 
 if (!BOT_TOKEN || !CHAT_ID) {
     console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
@@ -25,7 +25,9 @@ if (!BOT_TOKEN || !CHAT_ID) {
 
 // Настройка почтового транспорта
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.yandex.ru',
+    port: 465,
+    secure: true,
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
