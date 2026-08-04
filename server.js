@@ -33,6 +33,36 @@ writeLog(`=== SERVER STARTED ===`);
 writeLog(`EMAIL_FROM=${EMAIL_FROM}`);
 writeLog(`BREVO_API_KEY=${BREVO_API_KEY ? BREVO_API_KEY.substring(0,10) + '...' : 'EMPTY'}`);
 
+// Функция добавления контакта в Brevo
+async function addBrevoContact(email) {
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({ email: email, listIds: [] });
+        const options = {
+            hostname: 'api.brevo.com',
+            port: 443,
+            path: '/v3/contacts',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': BREVO_API_KEY,
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                writeLog(`[EMAIL] Контакт ${email}: ${res.statusCode} ${body.substring(0,100)}`);
+                resolve(res.statusCode === 201 || res.statusCode === 204);
+            });
+        });
+        req.on('error', (e) => { writeLog(`[EMAIL] Контакт ошибка: ${e.message}`); resolve(false); });
+        req.setTimeout(10000, () => { req.destroy(); resolve(false); });
+        req.write(postData);
+        req.end();
+    });
+}
+
 // Функция отправки email через Brevo HTTP API
 async function sendEmail(to, subject, html) {
     writeLog(`[EMAIL] Попытка отправки на ${to}, от ${EMAIL_FROM}`);
@@ -45,6 +75,9 @@ async function sendEmail(to, subject, html) {
         writeLog('[EMAIL] SKIP: Brevo API ключ не настроен');
         return false;
     }
+    
+    // Сначала добавляем контакт (обязательно для free плана Brevo)
+    await addBrevoContact(to);
     
     return new Promise((resolve) => {
         const postData = JSON.stringify({
