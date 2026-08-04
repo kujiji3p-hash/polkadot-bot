@@ -25,18 +25,19 @@ if (!BOT_TOKEN || !CHAT_ID) {
 // Настройка почтового транспорта
 const transporter = nodemailer.createTransport({
     host: 'smtp.yandex.ru',
-    port: 465,
-    secure: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     }
 });
 
-// Функция отправки email
+// Функция отправки email с таймаутом
 async function sendEmail(to, subject, html) {
     console.log(`[EMAIL] Попытка отправки на ${to}`);
     console.log(`[EMAIL] USER: ${EMAIL_USER}, PASS: ${EMAIL_PASS ? 'есть' : 'НЕТ'}`);
@@ -49,18 +50,24 @@ async function sendEmail(to, subject, html) {
         console.log('[EMAIL] Почта не настроена');
         return false;
     }
+    
+    const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout после 25 секунд')), 25000)
+    );
+    
     try {
         console.log('[EMAIL] Подключаюсь к SMTP...');
-        const info = await transporter.sendMail({
+        const sendPromise = transporter.sendMail({
             from: `"Polka Dot" <${EMAIL_USER}>`,
             to,
             subject,
             html
         });
+        const info = await Promise.race([sendPromise, timeout]);
         console.log(`[EMAIL] Успешно! ID: ${info.messageId}`);
         return true;
     } catch(e) {
-        console.error('[EMAIL] ОШИБКА:', e.code || '', e.message);
+        console.error('[EMAIL] ОШИБКА:', e.message);
         return false;
     }
 }
