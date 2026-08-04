@@ -15,7 +15,7 @@ const DB_PATH = path.join(__dirname, 'polkadot.db');
 
 // Настройки почты (Brevo API — работает на Render без SMTP)
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'polkadot.nails@yandex.by';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@polkadot.by';
 
 if (!BOT_TOKEN || !CHAT_ID) {
     console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
