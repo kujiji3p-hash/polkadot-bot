@@ -370,8 +370,8 @@ async function handleCallbackQuery(callbackQuery) {
         updateOrderStatus(orderId, newStatus);
 
         // Send email notification
-        console.log(`[STATUS] Заказ #${orderId}, email: '${orderEmail}', статус: ${newStatus}`);
-        if (orderEmail && orderEmail !== 'Не указано') {
+        console.log(`[STATUS] Заказ #${orderId}, email: '${orderEmail}', статус: ${newStatus}, email length: ${orderEmail.length}`);
+        if (orderEmail && orderEmail.length > 3 && orderEmail.includes('@')) {
             const statusMessages = {
                 processing: 'Ваш заказ принят и обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
