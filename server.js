@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const https = require('https');
 const Database = require('better-sqlite3');
 
 // =====================
@@ -13,63 +14,76 @@ const CHAT_ID = process.env.CHAT_ID || '814292031';
 const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, 'polkadot.db');
 
-// Настройки почты (Yandex)
-const EMAIL_USER = process.env.EMAIL_USER || 'polkadot.nails@yandex.ru';
-const EMAIL_PASS = process.env.EMAIL_PASS || 'polkadot101010';
+// Настройки почты (Brevo API — работает на Render без SMTP)
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'polkadot.nails@yandex.ru';
 
 if (!BOT_TOKEN || !CHAT_ID) {
     console.error('FATAL: BOT_TOKEN and CHAT_ID must be set');
     process.exit(1);
 }
 
-// Настройка почтового транспорта
-const transporter = nodemailer.createTransport({
-    host: 'smtp.yandex.ru',
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 20000,
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    }
-});
-
-// Функция отправки email с таймаутом
+// Функция отправки email через Brevo HTTP API
 async function sendEmail(to, subject, html) {
     console.log(`[EMAIL] Попытка отправки на ${to}`);
-    console.log(`[EMAIL] USER: ${EMAIL_USER}, PASS: ${EMAIL_PASS ? 'есть' : 'НЕТ'}`);
     
     if (!to) {
         console.log('[EMAIL] Адрес получателя не указан');
         return false;
     }
-    if (!EMAIL_USER || EMAIL_PASS === 'ваш_пароль_приложения') {
-        console.log('[EMAIL] Почта не настроена');
+    if (!BREVO_API_KEY) {
+        console.log('[EMAIL] Brevo API ключ не настроен');
         return false;
     }
     
-    const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout после 25 секунд')), 25000)
-    );
-    
-    try {
-        console.log('[EMAIL] Подключаюсь к SMTP...');
-        const sendPromise = transporter.sendMail({
-            from: `"Polka Dot" <${EMAIL_USER}>`,
-            to,
-            subject,
-            html
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({
+            sender: { name: 'Polka Dot', email: EMAIL_FROM },
+            to: [{ email: to }],
+            subject: subject,
+            htmlContent: html
         });
-        const info = await Promise.race([sendPromise, timeout]);
-        console.log(`[EMAIL] Успешно! ID: ${info.messageId}`);
-        return true;
-    } catch(e) {
-        console.error('[EMAIL] ОШИБКА:', e.message);
-        return false;
-    }
+
+        const options = {
+            hostname: 'api.brevo.com',
+            port: 443,
+            path: '/v3/smtp/email',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': BREVO_API_KEY,
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                if (res.statusCode === 201) {
+                    console.log(`[EMAIL] Успешно!`);
+                    resolve(true);
+                } else {
+                    console.error(`[EMAIL] ОШИБКА ${res.statusCode}: ${body}`);
+                    resolve(false);
+                }
+            });
+        });
+        
+        req.on('error', (e) => {
+            console.error('[EMAIL] ОШИБКА:', e.message);
+            resolve(false);
+        });
+        
+        req.setTimeout(15000, () => {
+            req.destroy();
+            console.error('[EMAIL] Timeout');
+            resolve(false);
+        });
+        
+        req.write(postData);
+        req.end();
+    });
 }
 
 // =====================
