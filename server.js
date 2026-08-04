@@ -156,23 +156,19 @@ async function sendOrderToAdmin(data) {
 
     const msg = `<b>🆕 Новый заказ #${orderId}</b>
 
-<b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
-<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
-<b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указано'}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
-<b>Комментарий:</b> ${escapeHtml(data.message) || 'Нет'}
+${escapeHtml(data.message) || ''}
 <b>Статус:</b> 🆕 Новый
 <b>Дата:</b> ${new Date().toLocaleString('ru-RU')}`;
 
     const keyboard = {
         inline_keyboard: [
             [
-                { text: '✅ В обработку', callback_data: `status_${orderId}_processing` },
+                { text: '✅ В обработке', callback_data: `status_${orderId}_processing` },
                 { text: '📦 Отправлен', callback_data: `status_${orderId}_shipped` }
             ],
             [
-                { text: '🚚 Доставлен', callback_data: `status_${orderId}_delivered` },
                 { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
             ]
         ]
@@ -264,20 +260,16 @@ async function handleCallbackQuery(callbackQuery) {
         // Update the message with new status
         const updatedMsg = `<b>📋 Заказ #${orderId}</b>
 
-<b>Имя:</b> ${escapeHtml(order.name) || 'Не указано'}
-<b>Email:</b> ${escapeHtml(order.email) || 'Не указано'}
-<b>Телефон:</b> ${escapeHtml(order.phone) || 'Не указано'}
 <b>Товар:</b> ${escapeHtml(order.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(order.quantity) || '1'}
-<b>Комментарий:</b> ${escapeHtml(order.message) || 'Нет'}
+${escapeHtml(order.message) || ''}
 <b>Статус:</b> ${statusLabel}
 <b>Дата:</b> ${order.date}`;
 
         // Keep remaining buttons (remove pressed one)
         const allButtons = [
-            { text: '✅ В обработку', callback_data: `status_${orderId}_processing` },
+            { text: '✅ В обработке', callback_data: `status_${orderId}_processing` },
             { text: '📦 Отправлен', callback_data: `status_${orderId}_shipped` },
-            { text: '🚚 Доставлен', callback_data: `status_${orderId}_delivered` },
             { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
         ];
         const remainingButtons = allButtons.filter(b => !b.callback_data.endsWith(`_${newStatus}`));
