@@ -380,7 +380,21 @@ async function handleCallbackQuery(callbackQuery) {
                 cancelled: 'Ваш заказ отменён.'
             };
             const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
-            const emailHtml = `<h2>Обновление статуса заказа</h2><p>${statusMessages[newStatus] || statusLabel}</p><hr><p><b>Товар:</b> ${escapeHtml(orderProduct)}</p><br><p>С уважением, Polka Dot</p>`;
+            const emailHtml = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: #111; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="margin: 0; font-size: 24px;">Polka Dot</h1>
+                        <p style="margin: 5px 0 0; opacity: 0.8;">Профессиональные инструменты для маникюра</p>
+                    </div>
+                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                        <h2 style="color: #111; margin-top: 0;">Обновление статуса заказа</h2>
+                        <p style="font-size: 16px; color: #333;">${statusMessages[newStatus] || statusLabel}</p>
+                        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                        <p style="color: #555;"><b>Товар:</b> ${escapeHtml(orderProduct)}</p>
+                        <br>
+                        <p style="color: #777; font-size: 14px;">С уважением,<br>Команда Polka Dot</p>
+                    </div>
+                </div>`;
             const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
             console.log(`[STATUS] Email результат: ${emailSent}`);
         }
@@ -567,12 +581,20 @@ async function handleCommand(msg) {
             };
             const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
             const emailHtml = `
-                <h2>Обновление статуса заказа</h2>
-                <p>${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
-                <hr>
-                <p><b>Товар:</b> ${order.product}</p>
-                <br>
-                <p>С уважением, Polka Dot</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: #111; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="margin: 0; font-size: 24px;">Polka Dot</h1>
+                        <p style="margin: 5px 0 0; opacity: 0.8;">Профессиональные инструменты для маникюра</p>
+                    </div>
+                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                        <h2 style="color: #111; margin-top: 0;">Обновление статуса заказа</h2>
+                        <p style="font-size: 16px; color: #333;">${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
+                        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                        <p style="color: #555;"><b>Товар:</b> ${order.product}</p>
+                        <br>
+                        <p style="color: #777; font-size: 14px;">С уважением,<br>Команда Polka Dot</p>
+                    </div>
+                </div>
             `;
             await sendEmail(order.email, `Заказ - ${statusClean}`, emailHtml);
         }
