@@ -357,20 +357,31 @@ async function handleCallbackQuery(callbackQuery) {
             };
             const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
             const emailHtml = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="background: #111; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                        <h1 style="margin: 0; font-size: 24px;">Polka Dot</h1>
-                        <p style="margin: 5px 0 0; opacity: 0.8;">Профессиональные инструменты для маникюра</p>
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                            <p style="margin:6px 0 0;font-size:13px;opacity:0.7;">Профессиональные инструменты для маникюра</p>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">${statusMessages[newStatus] || statusLabel}</p>
+                            <table style="width:100%;margin:16px 0;border-collapse:collapse;">
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(orderProduct)}</td></tr>
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
+                            </table>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, ответьте на это письмо или напишите нам в Telegram: @polkadot_beauty_bot</p>
+                        </div>
+                        <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
+                            <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
+                            <p style="color:#aaa;font-size:11px;margin:4px 0 0;">Вы получили это письмо, потому что оформили заказ на polkadot.by</p>
+                        </div>
                     </div>
-                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                        <h2 style="color: #111; margin-top: 0;">Обновление статуса заказа</h2>
-                        <p style="font-size: 16px; color: #333;">${statusMessages[newStatus] || statusLabel}</p>
-                        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                        <p style="color: #555;"><b>Товар:</b> ${escapeHtml(orderProduct)}</p>
-                        <br>
-                        <p style="color: #777; font-size: 14px;">С уважением,<br>Команда Polka Dot</p>
-                    </div>
-                </div>`;
+                </body>
+                </html>`;
             const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
             writeLog(`[STATUS] Email результат для заказа #${orderId}: ${emailSent}`);
         } else {
@@ -559,21 +570,31 @@ async function handleCommand(msg) {
             };
             const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
             const emailHtml = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="background: #111; color: #fff; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                        <h1 style="margin: 0; font-size: 24px;">Polka Dot</h1>
-                        <p style="margin: 5px 0 0; opacity: 0.8;">Профессиональные инструменты для маникюра</p>
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                            <p style="margin:6px 0 0;font-size:13px;opacity:0.7;">Профессиональные инструменты для маникюра</p>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
+                            <table style="width:100%;margin:16px 0;border-collapse:collapse;">
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(order.product)}</td></tr>
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
+                            </table>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, ответьте на это письмо или напишите нам в Telegram: @polkadot_beauty_bot</p>
+                        </div>
+                        <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
+                            <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
+                            <p style="color:#aaa;font-size:11px;margin:4px 0 0;">Вы получили это письмо, потому что оформили заказ на polkadot.by</p>
+                        </div>
                     </div>
-                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                        <h2 style="color: #111; margin-top: 0;">Обновление статуса заказа</h2>
-                        <p style="font-size: 16px; color: #333;">${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
-                        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                        <p style="color: #555;"><b>Товар:</b> ${order.product}</p>
-                        <br>
-                        <p style="color: #777; font-size: 14px;">С уважением,<br>Команда Polka Dot</p>
-                    </div>
-                </div>
-            `;
+                </body>
+                </html>`;
             await sendEmail(order.email, `Заказ - ${statusClean}`, emailHtml);
         }
         return;
