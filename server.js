@@ -304,14 +304,16 @@ async function handleCallbackQuery(callbackQuery) {
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} → ${statusLabel}` });
 
         // Parse original message to get order data
-        const originalText = callbackQuery.message.text || '';
+        const originalText = callbackQuery.message.text || callbackQuery.message.caption || '';
+        console.log(`[STATUS] Original text: ${originalText.substring(0, 200)}`);
         const lines = originalText.split('\n');
         let orderEmail = '';
         let orderProduct = '';
         for (const line of lines) {
-            if (line.includes('Email:')) orderEmail = line.split('Email:')[1].trim();
-            if (line.includes('Товар:')) orderProduct = line.split('Товар:')[1].trim();
+            if (line.includes('Email:') || line.includes('email:')) orderEmail = line.split(/Email:|email:/i)[1].trim();
+            if (line.includes('Товар:') || line.includes('товар:')) orderProduct = line.split(/Товар:|товар:/i)[1].trim();
         }
+        console.log(`[STATUS] Parsed email: '${orderEmail}', product: '${orderProduct}'`);
 
         // Update the message with new status
         const updatedMsg = originalText
