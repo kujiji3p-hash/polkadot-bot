@@ -156,6 +156,7 @@ async function sendOrderToAdmin(data) {
 
     const msg = `<b>🆕 Новый заказ #${orderId}</b>
 
+<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
 ${escapeHtml(data.message) || ''}
@@ -260,6 +261,7 @@ async function handleCallbackQuery(callbackQuery) {
         // Update the message with new status
         const updatedMsg = `<b>📋 Заказ #${orderId}</b>
 
+<b>Email:</b> ${escapeHtml(order.email) || 'Не указано'}
 <b>Товар:</b> ${escapeHtml(order.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(order.quantity) || '1'}
 ${escapeHtml(order.message) || ''}
