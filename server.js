@@ -35,21 +35,28 @@ const transporter = nodemailer.createTransport({
 
 // Функция отправки email
 async function sendEmail(to, subject, html) {
-    if (!to || !EMAIL_USER || EMAIL_PASS === 'ваш_пароль_приложения') {
-        console.log('Email не настроен или адрес не указан');
+    console.log(`[EMAIL] Попытка отправки на ${to}`);
+    console.log(`[EMAIL] USER: ${EMAIL_USER}, PASS: ${EMAIL_PASS ? '***' : 'НЕТ'}`);
+    
+    if (!to) {
+        console.log('[EMAIL] Адрес получателя не указан');
+        return false;
+    }
+    if (!EMAIL_USER || EMAIL_PASS === 'ваш_пароль_приложения') {
+        console.log('[EMAIL] Почта не настроена');
         return false;
     }
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"Polka Dot" <${EMAIL_USER}>`,
             to,
             subject,
             html
         });
-        console.log(`Email отправлен на ${to}`);
+        console.log(`[EMAIL] Успешно отправлено на ${to}, ID: ${info.messageId}`);
         return true;
     } catch(e) {
-        console.error('Ошибка отправки email:', e.message);
+        console.error('[EMAIL] Ошибка отправки:', e.message);
         return false;
     }
 }
@@ -307,11 +314,11 @@ ${escapeHtml(order.message) || ''}
         });
 
         // Send email notification to client
+        console.log(`[STATUS] Заказ #${orderId}, email: ${order.email}, статус: ${newStatus}`);
         if (order.email) {
             const statusMessages = {
                 processing: 'Ваш заказ принят и обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
-                delivered: 'Ваш заказ доставлен. Спасибо за покупку!',
                 cancelled: 'Ваш заказ отменён.'
             };
             const emailHtml = `
@@ -319,11 +326,14 @@ ${escapeHtml(order.message) || ''}
                 <p>${statusMessages[newStatus] || `Статус изменён: ${statusLabel}`}</p>
                 <hr>
                 <p><b>Товар:</b> ${order.product}</p>
-                <p><b>Сумма:</b> ${order.message ? order.message.match(/Итого: (\d+ BYN)/)?.[1] || '' : ''}</p>
                 <br>
                 <p>С уважением, Polka Dot</p>
             `;
-            await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+            console.log(`[STATUS] Отправляю email на ${order.email}`);
+            const emailSent = await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+            console.log(`[STATUS] Результат отправки email: ${emailSent}`);
+        } else {
+            console.log(`[STATUS] Email не указан для заказа #${orderId}`);
         }
     }
 
