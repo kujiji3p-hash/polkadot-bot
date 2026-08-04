@@ -13,8 +13,8 @@ const CHAT_ID = process.env.CHAT_ID || '814292031';
 const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, 'polkadot.db');
 
-// Настройки почты (Brevo API — работает на Render без SMTP)
-const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+// Настройки почты (SendGrid API)
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@polkadot.by';
 
 if (!BOT_TOKEN || !CHAT_ID) {
@@ -31,39 +31,9 @@ function writeLog(msg) {
 }
 writeLog(`=== SERVER STARTED ===`);
 writeLog(`EMAIL_FROM=${EMAIL_FROM}`);
-writeLog(`BREVO_API_KEY=${BREVO_API_KEY ? BREVO_API_KEY.substring(0,10) + '...' : 'EMPTY'}`);
+writeLog(`SENDGRID_API_KEY=${SENDGRID_API_KEY ? 'SET' : 'EMPTY'}`);
 
-// Функция добавления контакта в Brevo
-async function addBrevoContact(email) {
-    return new Promise((resolve) => {
-        const postData = JSON.stringify({ email: email, listIds: [] });
-        const options = {
-            hostname: 'api.brevo.com',
-            port: 443,
-            path: '/v3/contacts',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api-key': BREVO_API_KEY,
-                'Content-Length': Buffer.byteLength(postData)
-            }
-        };
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                writeLog(`[EMAIL] Контакт ${email}: ${res.statusCode} ${body.substring(0,100)}`);
-                resolve(res.statusCode === 201 || res.statusCode === 204);
-            });
-        });
-        req.on('error', (e) => { writeLog(`[EMAIL] Контакт ошибка: ${e.message}`); resolve(false); });
-        req.setTimeout(10000, () => { req.destroy(); resolve(false); });
-        req.write(postData);
-        req.end();
-    });
-}
-
-// Функция отправки email через Brevo HTTP API
+// Функция отправки email через SendGrid HTTP API
 async function sendEmail(to, subject, html) {
     writeLog(`[EMAIL] Попытка отправки на ${to}, от ${EMAIL_FROM}`);
     
@@ -71,32 +41,27 @@ async function sendEmail(to, subject, html) {
         writeLog('[EMAIL] SKIP: Адрес получателя не указан');
         return false;
     }
-    if (!BREVO_API_KEY) {
-        writeLog('[EMAIL] SKIP: Brevo API ключ не настроен');
+    if (!SENDGRID_API_KEY) {
+        writeLog('[EMAIL] SKIP: SendGrid API ключ не настроен');
         return false;
     }
     
-    // Сначала добавляем контакт (обязательно для free плана Brevo)
-    await addBrevoContact(to);
-    
     return new Promise((resolve) => {
         const postData = JSON.stringify({
-            sender: { name: 'Polka Dot', email: EMAIL_FROM },
-            to: [{ email: to }],
+            personalizations: [{ to: [{ email: to }] }],
+            from: { email: EMAIL_FROM, name: 'Polka Dot' },
             subject: subject,
-            htmlContent: html
+            content: [{ type: 'text/html', value: html }]
         });
 
-        writeLog(`[EMAIL] Отправка в Brevo...`);
-
         const options = {
-            hostname: 'api.brevo.com',
+            hostname: 'api.sendgrid.com',
             port: 443,
-            path: '/v3/smtp/email',
+            path: '/v3/mail/send',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'api-key': BREVO_API_KEY,
+                'Authorization': `Bearer ${SENDGRID_API_KEY}`,
                 'Content-Length': Buffer.byteLength(postData)
             }
         };
@@ -105,10 +70,11 @@ async function sendEmail(to, subject, html) {
             let body = '';
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
-                writeLog(`[EMAIL] Brevo ответ: ${res.statusCode} ${body}`);
-                if (res.statusCode === 201) {
+                if (res.statusCode === 202) {
+                    writeLog(`[EMAIL] УСПЕХ! Статус: ${res.statusCode}`);
                     resolve(true);
                 } else {
+                    writeLog(`[EMAIL] ОШИБКА ${res.statusCode}: ${body}`);
                     resolve(false);
                 }
             });
