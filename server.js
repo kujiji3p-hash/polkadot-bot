@@ -346,8 +346,9 @@ async function handleCallbackQuery(callbackQuery) {
                 shipped: 'Ваш заказ отправлен!',
                 cancelled: 'Ваш заказ отменён.'
             };
-            const emailHtml = `<h2>Обновление заказа #${orderId}</h2><p>${statusMessages[newStatus] || statusLabel}</p><hr><p><b>Товар:</b> ${escapeHtml(orderProduct)}</p><br><p>С уважением, Polka Dot</p>`;
-            const emailSent = await sendEmail(orderEmail, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+            const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
+            const emailHtml = `<h2>Обновление статуса заказа</h2><p>${statusMessages[newStatus] || statusLabel}</p><hr><p><b>Товар:</b> ${escapeHtml(orderProduct)}</p><br><p>С уважением, Polka Dot</p>`;
+            const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
             console.log(`[STATUS] Email результат: ${emailSent}`);
         }
     }
@@ -529,18 +530,18 @@ async function handleCommand(msg) {
                 new: 'Ваш заказ принят и ожидает обработки.',
                 processing: 'Ваш заказ обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
-                delivered: 'Ваш заказ доставлен. Спасибо за покупку!',
                 cancelled: 'Ваш заказ отменён.'
             };
+            const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
             const emailHtml = `
-                <h2>Обновление заказа #${orderId}</h2>
+                <h2>Обновление статуса заказа</h2>
                 <p>${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
                 <hr>
                 <p><b>Товар:</b> ${order.product}</p>
                 <br>
                 <p>С уважением, Polka Dot</p>
             `;
-            await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+            await sendEmail(order.email, `Заказ - ${statusClean}`, emailHtml);
         }
         return;
     }
