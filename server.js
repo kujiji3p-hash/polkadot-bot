@@ -3,7 +3,6 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const https = require('https');
 const Database = require('better-sqlite3');
 
 // =====================
