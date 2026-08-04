@@ -393,6 +393,10 @@ async function handleCallbackQuery(callbackQuery) {
         const qId = parseInt(data.split('_')[1]);
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} отмечен как обработанный` });
 
+        // Get question from database
+        const question = getQuestionById(qId);
+        const questionEmail = question ? (question.email || '') : '';
+
         // Parse from message
         const originalText = callbackQuery.message.text || '';
         const updatedMsg = originalText.replace(/🆕 Новый/g, '✅ Обработан');
@@ -406,6 +410,35 @@ async function handleCallbackQuery(callbackQuery) {
             parse_mode: 'HTML',
             reply_markup: JSON.stringify(keyboard)
         });
+
+        // Update question status
+        updateQuestionStatus(qId, 'done');
+
+        // Send email notification
+        if (questionEmail && questionEmail.includes('@')) {
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">Мы получили ваш вопрос и обрабатываем его. Ответ будет отправлен на этот email в ближайшее время.</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">По срочным вопросам: polkadot.nails@yandex.ru</p>
+                        </div>
+                        <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
+                            <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
+            await sendEmail(questionEmail, 'Ваш вопрос принят — Polka Dot', emailHtml);
+            writeLog(`[QDONE] Email отправлен на ${questionEmail}`);
+        }
     }
 
     if (data.startsWith('qreply_')) {
@@ -744,7 +777,39 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Использование: /qreply ID ТЕКСТ');
             return;
         }
-        await sendMessage(chatId, `✅ Ответ на вопрос #${qId} принят:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную, если email не указан в сообщении.`);
+        const question = getQuestionById(qId);
+        const questionEmail = question ? (question.email || '') : '';
+
+        if (questionEmail && questionEmail.includes('@')) {
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.6;">${escapeHtml(replyText)}</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Есть ещё вопросы? Напишите нам: polkadot.nails@yandex.ru</p>
+                        </div>
+                        <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
+                            <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
+            const sent = await sendEmail(questionEmail, `Ответ на ваш вопрос — Polka Dot`, emailHtml);
+            if (sent) {
+                await sendMessage(chatId, `✅ Ответ на вопрос #${qId} отправлен на ${questionEmail}`);
+            } else {
+                await sendMessage(chatId, `❌ Не удалось отправить email на ${questionEmail}`);
+            }
+        } else {
+            await sendMessage(chatId, `⚠ У вопроса #${qId} нет email. Ответ:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную.`);
+        }
         return;
     }
 }
