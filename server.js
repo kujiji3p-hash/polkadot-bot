@@ -286,26 +286,25 @@ async function handleCallbackQuery(callbackQuery) {
         const orderId = parseInt(parts[1]);
         const newStatus = parts[2];
 
-        const order = getOrderById(orderId);
-        if (!order) {
-            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} не найден` });
-            return;
-        }
-
-        updateOrderStatus(orderId, newStatus);
-
         const statusLabel = STATUS_LABELS[newStatus] || newStatus;
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} → ${statusLabel}` });
 
-        // Update the message with new status
-        const updatedMsg = `<b>📋 Заказ #${orderId}</b>
+        // Parse original message to get order data
+        const originalText = callbackQuery.message.text || '';
+        const lines = originalText.split('\n');
+        let orderEmail = '';
+        let orderProduct = '';
+        for (const line of lines) {
+            if (line.includes('Email:')) orderEmail = line.split('Email:')[1].trim();
+            if (line.includes('Товар:')) orderProduct = line.split('Товар:')[1].trim();
+        }
 
-<b>Email:</b> ${escapeHtml(order.email) || 'Не указано'}
-<b>Товар:</b> ${escapeHtml(order.product) || 'Не указано'}
-<b>Количество:</b> ${escapeHtml(order.quantity) || '1'}
-${escapeHtml(order.message) || ''}
-<b>Статус:</b> ${statusLabel}
-<b>Дата:</b> ${order.date}`;
+        // Update the message with new status
+        const updatedMsg = originalText
+            .replace(/🆕 Новый/g, statusLabel)
+            .replace(/⚙️ В обработке/g, statusLabel)
+            .replace(/📦 Отправлен/g, statusLabel)
+            .replace(/❌ Отменён/g, statusLabel);
 
         // Keep remaining buttons (remove pressed one)
         const allButtons = [
@@ -314,64 +313,39 @@ ${escapeHtml(order.message) || ''}
             { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
         ];
         const remainingButtons = allButtons.filter(b => !b.callback_data.endsWith(`_${newStatus}`));
-        const keyboard = { inline_keyboard: [remainingButtons] };
+        const keyboard = { inline_keyboard: remainingButtons.length > 0 ? [remainingButtons] : [] };
 
         await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: callbackQuery.message.message_id,
             text: updatedMsg,
             parse_mode: 'HTML',
-            reply_markup: JSON.stringify(keyboard)
+            reply_markup: remainingButtons.length > 0 ? JSON.stringify(keyboard) : undefined
         });
 
-        // Send email notification to client
-        console.log(`[STATUS] Заказ #${orderId}, email: ${order.email}, статус: ${newStatus}`);
-        if (order.email) {
+        // Send email notification
+        console.log(`[STATUS] Заказ #${orderId}, email: ${orderEmail}, статус: ${newStatus}`);
+        if (orderEmail) {
             const statusMessages = {
                 processing: 'Ваш заказ принят и обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
                 cancelled: 'Ваш заказ отменён.'
             };
-            const emailHtml = `
-                <h2>Обновление заказа #${orderId}</h2>
-                <p>${statusMessages[newStatus] || `Статус изменён: ${statusLabel}`}</p>
-                <hr>
-                <p><b>Товар:</b> ${order.product}</p>
-                <br>
-                <p>С уважением, Polka Dot</p>
-            `;
-            console.log(`[STATUS] Отправляю email на ${order.email}`);
-            const emailSent = await sendEmail(order.email, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
-            console.log(`[STATUS] Результат отправки email: ${emailSent}`);
-        } else {
-            console.log(`[STATUS] Email не указан для заказа #${orderId}`);
+            const emailHtml = `<h2>Обновление заказа #${orderId}</h2><p>${statusMessages[newStatus] || statusLabel}</p><hr><p><b>Товар:</b> ${escapeHtml(orderProduct)}</p><br><p>С уважением, Polka Dot</p>`;
+            const emailSent = await sendEmail(orderEmail, `Заказ #${orderId} - ${statusLabel}`, emailHtml);
+            console.log(`[STATUS] Email результат: ${emailSent}`);
         }
     }
 
     if (data.startsWith('qdone_')) {
         const qId = parseInt(data.split('_')[1]);
-        const question = getQuestionById(qId);
-        if (!question) {
-            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
-            return;
-        }
-        updateQuestionStatus(qId, 'done');
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} отмечен как обработанный` });
 
-        const updatedMsg = `<b>✅ Вопрос #${qId} (обработан)</b>
+        // Parse from message
+        const originalText = callbackQuery.message.text || '';
+        const updatedMsg = originalText.replace(/🆕 Новый/g, '✅ Обработан');
 
-<b>Имя:</b> ${escapeHtml(question.name) || 'Не указано'}
-<b>Email:</b> ${escapeHtml(question.email) || 'Не указано'}
-<b>Тема:</b> ${escapeHtml(question.topic) || 'Не указана'}
-<b>Вопрос:</b> ${escapeHtml(question.message) || 'Нет'}
-<b>Дата:</b> ${question.date}`;
-
-        // Keep reply button
-        const keyboard = {
-            inline_keyboard: [
-                [{ text: '💬 Ответить', callback_data: `qreply_${qId}` }]
-            ]
-        };
+        const keyboard = { inline_keyboard: [[{ text: '💬 Ответить', callback_data: `qreply_${qId}` }]] };
 
         await telegramAPI('editMessageText', {
             chat_id: chatId,
@@ -384,11 +358,6 @@ ${escapeHtml(order.message) || ''}
 
     if (data.startsWith('qreply_')) {
         const qId = parseInt(data.split('_')[1]);
-        const question = getQuestionById(qId);
-        if (!question) {
-            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
-            return;
-        }
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Используйте: /qreply ${qId} текст` });
         await sendMessage(chatId, `Для ответа на вопрос #${qId} используйте:\n<code>/qreply ${qId} текст ответа</code>`);
     }
@@ -705,30 +674,7 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Использование: /qreply ID ТЕКСТ');
             return;
         }
-        const question = getQuestionById(qId);
-        if (!question) {
-            await sendMessage(chatId, `Вопрос #${qId} не найден.`);
-            return;
-        }
-        // Mark as done
-        updateQuestionStatus(qId, 'done');
-
-        // Send email to client
-        if (question.email) {
-            const emailHtml = `
-                <h2>Ответ на ваш вопрос</h2>
-                <p><b>Ваш вопрос:</b> ${escapeHtml(question.message)}</p>
-                <hr>
-                <p><b>Ответ:</b></p>
-                <p>${escapeHtml(replyText)}</p>
-                <br>
-                <p>С уважением, Polka Dot</p>
-            `;
-            await sendEmail(question.email, 'Ответ на ваш вопрос - Polka Dot', emailHtml);
-            await sendMessage(chatId, `✅ Вопрос #${qId} обработан. Ответ отправлен на ${question.email}`);
-        } else {
-            await sendMessage(chatId, `✅ Вопрос #${qId} обработан. Email не указан.`);
-        }
+        await sendMessage(chatId, `✅ Ответ на вопрос #${qId} принят:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную, если email не указан в сообщении.`);
         return;
     }
 }
