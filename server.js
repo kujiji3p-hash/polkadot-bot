@@ -335,19 +335,14 @@ async function handleCallbackQuery(callbackQuery) {
         const statusLabel = STATUS_LABELS[newStatus] || newStatus;
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} → ${statusLabel}` });
 
-        // Parse original message to get order data
-        const originalText = callbackQuery.message.text || callbackQuery.message.caption || '';
-        console.log(`[STATUS] Original text: ${originalText.substring(0, 200)}`);
-        const lines = originalText.split('\n');
-        let orderEmail = '';
-        let orderProduct = '';
-        for (const line of lines) {
-            if (line.includes('Email:') || line.includes('email:')) orderEmail = line.split(/Email:|email:/i)[1].trim();
-            if (line.includes('Товар:') || line.includes('товар:')) orderProduct = line.split(/Товар:|товар:/i)[1].trim();
-        }
-        console.log(`[STATUS] Parsed email: '${orderEmail}', product: '${orderProduct}'`);
+        // Get order from database (reliable — no parsing from message text)
+        const order = getOrderById(orderId);
+        const orderEmail = order ? (order.email || '') : '';
+        const orderProduct = order ? (order.product || '') : '';
+        console.log(`[STATUS] Заказ #${orderId}, email из БД: '${orderEmail}', product: '${orderProduct}'`);
 
         // Update the message with new status
+        const originalText = callbackQuery.message.text || callbackQuery.message.caption || '';
         const updatedMsg = originalText
             .replace(/🆕 Новый/g, statusLabel)
             .replace(/⚙️ В обработке/g, statusLabel)
@@ -371,9 +366,12 @@ async function handleCallbackQuery(callbackQuery) {
             reply_markup: remainingButtons.length > 0 ? JSON.stringify(keyboard) : undefined
         });
 
+        // Update order status in database
+        updateOrderStatus(orderId, newStatus);
+
         // Send email notification
-        console.log(`[STATUS] Заказ #${orderId}, email: ${orderEmail}, статус: ${newStatus}`);
-        if (orderEmail) {
+        console.log(`[STATUS] Заказ #${orderId}, email: '${orderEmail}', статус: ${newStatus}`);
+        if (orderEmail && orderEmail !== 'Не указано') {
             const statusMessages = {
                 processing: 'Ваш заказ принят и обрабатывается.',
                 shipped: 'Ваш заказ отправлен!',
@@ -397,6 +395,8 @@ async function handleCallbackQuery(callbackQuery) {
                 </div>`;
             const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
             console.log(`[STATUS] Email результат: ${emailSent}`);
+        } else {
+            console.log(`[STATUS] Email не указан для заказа #${orderId}, уведомление не отправлено`);
         }
     }
 
@@ -859,7 +859,7 @@ const server = http.createServer(async (req, res) => {
     // Список заказов (для админа)
     if (req.method === 'GET' && req.url === '/api/orders') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ orders }));
+        res.end(JSON.stringify({ orders: getOrders() }));
         return;
     }
 
