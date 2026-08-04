@@ -875,43 +875,6 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Чтение логов
-    if (req.method === 'GET' && req.url === '/api/logs') {
-        try {
-            const logs = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf-8') : 'No logs yet';
-            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end(logs);
-        } catch(e) {
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.end('Error reading logs: ' + e.message);
-        }
-        return;
-    }
-
-    // Тест email
-    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const testEmail = url.searchParams.get('to') || 'kujiji3p@gmail.com';
-        writeLog(`[TEST] Запуск теста email на ${testEmail}`);
-        const result = await sendEmail(testEmail, 'Тест Polka Dot', '<h1>Тест</h1><p>Если вы это видите — email работает!</p>');
-        writeLog(`[TEST] Результат: ${result}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ sent: result, to: testEmail, from: EMAIL_FROM }));
-        return;
-    }
-
-    // Тест email
-    if (req.method === 'GET' && req.url.startsWith('/api/test-email')) {
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const testEmail = url.searchParams.get('to') || 'kujiji3p@gmail.com';
-        writeLog(`[TEST] Запуск теста email на ${testEmail}`);
-        const result = await sendEmail(testEmail, 'Тест Polka Dot', '<h1>Тест</h1><p>Если вы это видите — email работает!</p>');
-        writeLog(`[TEST] Результат: ${result}`);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ sent: result, to: testEmail, from: EMAIL_FROM, apiKeySet: !!BREVO_API_KEY }));
-        return;
-    }
-
     res.writeHead(404);
     res.end('Not found');
 });
