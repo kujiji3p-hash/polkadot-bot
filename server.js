@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const Database = require('better-sqlite3');
 
 // =====================
 // НАСТРОЙКИ (секреты — через env на хостинге)
@@ -10,9 +11,7 @@ const nodemailer = require('nodemailer');
 const BOT_TOKEN = process.env.BOT_TOKEN || '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
 const CHAT_ID = process.env.CHAT_ID || '814292031';
 const PORT = process.env.PORT || 3001;
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-const QUESTIONS_FILE = path.join(DATA_DIR, 'questions.json');
+const DB_PATH = path.join(__dirname, 'polkadot.db');
 
 // Настройки почты (Yandex)
 const EMAIL_USER = process.env.EMAIL_USER || 'polkadot.nails@yandex.ru';
@@ -56,49 +55,74 @@ async function sendEmail(to, subject, html) {
 }
 
 // =====================
-// ДАННЫЕ (с сохранением в файл)
+// ДАННЫЕ (SQLite база данных)
 // =====================
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+const db = new Database(DB_PATH);
+
+// Создаем таблицы
+db.exec(`
+    CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        email TEXT,
+        phone TEXT,
+        product TEXT,
+        quantity TEXT,
+        message TEXT,
+        status TEXT DEFAULT 'new',
+        date TEXT
+    )
+`);
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        email TEXT,
+        topic TEXT,
+        message TEXT,
+        status TEXT DEFAULT 'new',
+        date TEXT
+    )
+`);
+
+// Функции для работы с заказами
+function getOrders() {
+    return db.prepare('SELECT * FROM orders ORDER BY id DESC').all();
 }
 
-let orders = [];
-try {
-    if (fs.existsSync(ORDERS_FILE)) {
-        orders = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
-        console.log(`Loaded ${orders.length} orders from file`);
-    }
-} catch(e) {
-    console.error('Error loading orders:', e.message);
-    orders = [];
+function getOrderById(id) {
+    return db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
 }
 
-function saveOrders() {
-    try {
-        fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
-    } catch(e) {
-        console.error('Error saving orders:', e.message);
-    }
+function addOrder(data) {
+    const stmt = db.prepare('INSERT INTO orders (name, email, phone, product, quantity, message, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    return stmt.run(data.name || '', data.email || '', data.phone || '', data.product || '', data.quantity || '', data.message || '', 'new', new Date().toLocaleString('ru-RU'));
 }
 
-let questions = [];
-try {
-    if (fs.existsSync(QUESTIONS_FILE)) {
-        questions = JSON.parse(fs.readFileSync(QUESTIONS_FILE, 'utf8'));
-        console.log(`Loaded ${questions.length} questions from file`);
-    }
-} catch(e) {
-    console.error('Error loading questions:', e.message);
-    questions = [];
+function updateOrderStatus(id, status) {
+    return db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
 }
 
-function saveQuestions() {
-    try {
-        fs.writeFileSync(QUESTIONS_FILE, JSON.stringify(questions, null, 2));
-    } catch(e) {
-        console.error('Error saving questions:', e.message);
-    }
+// Функции для работы с вопросами
+function getQuestions() {
+    return db.prepare('SELECT * FROM questions ORDER BY id DESC').all();
 }
+
+function getQuestionById(id) {
+    return db.prepare('SELECT * FROM questions WHERE id = ?').get(id);
+}
+
+function addQuestion(data) {
+    const stmt = db.prepare('INSERT INTO questions (name, email, topic, message, status, date) VALUES (?, ?, ?, ?, ?, ?)');
+    return stmt.run(data.name || '', data.email || '', data.topic || '', data.message || '', 'new', new Date().toLocaleString('ru-RU'));
+}
+
+function updateQuestionStatus(id, status) {
+    return db.prepare('UPDATE questions SET status = ? WHERE id = ?').run(status, id);
+}
+
+console.log('Database initialized');
 
 const faqData = [
     { q: 'Какие товары есть?', a: 'У нас верхние формы для наращивания и гели для моделирования ногтей.' },
@@ -150,9 +174,8 @@ async function sendMessage(chatId, text, options = {}) {
 }
 
 async function sendOrderToAdmin(data) {
-    const orderId = orders.length + 1;
-    orders.push({ id: orderId, ...data, status: 'new', date: new Date().toLocaleString('ru-RU') });
-    saveOrders();
+    const result = addOrder(data);
+    const orderId = result.lastInsertRowid;
 
     const msg = `<b>🆕 Новый заказ #${orderId}</b>
 
@@ -187,9 +210,8 @@ function escapeHtml(value) {
 }
 
 async function sendQuestionToAdmin(data) {
-    const qId = questions.length + 1;
-    questions.push({ id: qId, ...data, status: 'new', date: new Date().toLocaleString('ru-RU') });
-    saveQuestions();
+    const result = addQuestion(data);
+    const qId = result.lastInsertRowid;
 
     const topicLabels = {
         products: 'О продукции',
@@ -246,14 +268,13 @@ async function handleCallbackQuery(callbackQuery) {
         const orderId = parseInt(parts[1]);
         const newStatus = parts[2];
 
-        const order = orders.find(o => o.id === orderId);
+        const order = getOrderById(orderId);
         if (!order) {
             await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} не найден` });
             return;
         }
 
-        order.status = newStatus;
-        saveOrders();
+        updateOrderStatus(orderId, newStatus);
 
         const statusLabel = STATUS_LABELS[newStatus] || newStatus;
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Заказ #${orderId} → ${statusLabel}` });
@@ -308,13 +329,12 @@ ${escapeHtml(order.message) || ''}
 
     if (data.startsWith('qdone_')) {
         const qId = parseInt(data.split('_')[1]);
-        const question = questions.find(q => q.id === qId);
+        const question = getQuestionById(qId);
         if (!question) {
             await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
             return;
         }
-        question.status = 'done';
-        saveQuestions();
+        updateQuestionStatus(qId, 'done');
         await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} отмечен как обработанный` });
 
         const updatedMsg = `<b>✅ Вопрос #${qId} (обработан)</b>
@@ -343,7 +363,7 @@ ${escapeHtml(order.message) || ''}
 
     if (data.startsWith('qreply_')) {
         const qId = parseInt(data.split('_')[1]);
-        const question = questions.find(q => q.id === qId);
+        const question = getQuestionById(qId);
         if (!question) {
             await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Вопрос #${qId} не найден` });
             return;
@@ -450,22 +470,24 @@ async function handleCommand(msg) {
     }
 
     if (cmd === '/orders') {
-        if (orders.length === 0) {
+        const allOrders = getOrders();
+        if (allOrders.length === 0) {
             await sendMessage(chatId, 'Заказов пока нет.');
             return;
         }
         let msg = '<b>📋 Все заказы:</b>\n\n';
-        orders.slice(-15).forEach(o => {
+        allOrders.slice(0, 15).forEach(o => {
             const statusLabel = STATUS_LABELS[o.status] || o.status;
             msg += `<b>#${o.id}</b> | ${o.name} | ${o.product} | ${statusLabel}\n`;
         });
-        msg += `\nВсего: ${orders.length} заказов`;
+        msg += `\nВсего: ${allOrders.length} заказов`;
         await sendMessage(chatId, msg);
         return;
     }
 
     if (cmd === '/neworders') {
-        const newOrders = orders.filter(o => o.status === 'new' || o.status === 'processing');
+        const allOrders = getOrders();
+        const newOrders = allOrders.filter(o => o.status === 'new' || o.status === 'processing');
         if (newOrders.length === 0) {
             await sendMessage(chatId, '✅ Нет необработанных заказов!');
             return;
@@ -484,16 +506,15 @@ async function handleCommand(msg) {
         const orderId = parseInt(args[1]);
         const status = args[2];
         if (!orderId || !status) {
-            await sendMessage(chatId, 'Использование: /status НОМЕР СТАТУС\nСтатусы: новый, обработка, отправлен, доставлен, отменён');
+            await sendMessage(chatId, 'Использование: /status НОМЕР СТАТУС\nСтатусы: новый, обработка, отправлен, отменён');
             return;
         }
-        const order = orders.find(o => o.id === orderId);
+        const order = getOrderById(orderId);
         if (!order) {
             await sendMessage(chatId, `Заказ #${orderId} не найден.`);
             return;
         }
-        order.status = status;
-        saveOrders();
+        updateOrderStatus(orderId, status);
         const statusLabel = STATUS_LABELS[status] || status;
         await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${statusLabel}</b>`);
 
@@ -526,13 +547,17 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Использование: /send ID ТЕКСТ');
             return;
         }
-        const order = orders.find(o => o.id === orderId);
-        if (!order || !order.chatId) {
-            await sendMessage(chatId, `Заказ #${orderId} не найден или нет chatId клиента.`);
+        const order = getOrderById(orderId);
+        if (!order) {
+            await sendMessage(chatId, `Заказ #${orderId} не найден.`);
             return;
         }
-        await sendMessage(order.chatId, `Ответ от Polka Dot:\n\n${replyText}`);
-        await sendMessage(chatId, `Ответ отправлен клиенту заказа #${orderId}`);
+        if (order.email) {
+            await sendEmail(order.email, 'Ответ от Polka Dot', `<p>${escapeHtml(replyText)}</p>`);
+            await sendMessage(chatId, `Ответ отправлен на ${order.email}`);
+        } else {
+            await sendMessage(chatId, `У заказа #${orderId} нет email.`);
+        }
         return;
     }
 
@@ -542,15 +567,16 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Использование: /broadcast ТЕКСТ');
             return;
         }
-        const clientIds = [...new Set(orders.filter(o => o.chatId).map(o => o.chatId))];
-        if (clientIds.length === 0) {
+        const allOrders = getOrders();
+        const emails = [...new Set(allOrders.filter(o => o.email).map(o => o.email))];
+        if (emails.length === 0) {
             await sendMessage(chatId, 'Нет клиентов для рассылки.');
             return;
         }
         let sent = 0;
-        for (const id of clientIds) {
+        for (const email of emails) {
             try {
-                await sendMessage(id, `<b>Уведомление от Polka Dot</b>\n\n${broadcastText}`);
+                await sendEmail(email, 'Уведомление от Polka Dot', `<p>${escapeHtml(broadcastText)}</p>`);
                 sent++;
             } catch(e) {}
         }
@@ -559,10 +585,11 @@ async function handleCommand(msg) {
     }
 
     if (cmd === '/stats') {
-        const total = orders.length;
+        const allOrders = getOrders();
+        const total = allOrders.length;
         const statuses = {};
-        orders.forEach(o => { statuses[o.status] = (statuses[o.status] || 0) + 1; });
-        const clients = [...new Set(orders.filter(o => o.chatId).map(o => o.chatId))].length;
+        allOrders.forEach(o => { statuses[o.status] = (statuses[o.status] || 0) + 1; });
+        const clients = [...new Set(allOrders.filter(o => o.email).map(o => o.email))].length;
 
         await sendMessage(chatId, `<b>Статистика:</b>
 
@@ -570,7 +597,7 @@ async function handleCommand(msg) {
 Новых: <b>${statuses.new || 0}</b>
 В обработке: <b>${statuses.processing || 0}</b>
 Отправлено: <b>${statuses.shipped || 0}</b>
-Доставлено: <b>${statuses.delivered || 0}</b>
+Отменено: <b>${statuses.cancelled || 0}</b>
 Уникальных клиентов: <b>${clients}</b>`);
         return;
     }
@@ -587,10 +614,10 @@ async function handleCommand(msg) {
     if (cmd === '/history') {
         const page = parseInt(args[1]) || 1;
         const perPage = 5;
-        const sorted = [...orders].reverse();
-        const totalPages = Math.ceil(sorted.length / perPage);
+        const allOrders = getOrders();
+        const totalPages = Math.ceil(allOrders.length / perPage);
         const start = (page - 1) * perPage;
-        const pageOrders = sorted.slice(start, start + perPage);
+        const pageOrders = allOrders.slice(start, start + perPage);
 
         if (pageOrders.length === 0) {
             await sendMessage(chatId, 'История заказов пуста.');
@@ -618,22 +645,24 @@ async function handleCommand(msg) {
     }
 
     if (cmd === '/questions') {
-        if (questions.length === 0) {
+        const allQuestions = getQuestions();
+        if (allQuestions.length === 0) {
             await sendMessage(chatId, 'Вопросов пока нет.');
             return;
         }
         let msg = '<b>❓ Все вопросы:</b>\n\n';
-        questions.slice(-15).forEach(q => {
+        allQuestions.slice(0, 15).forEach(q => {
             const statusLabel = q.status === 'done' ? '✅ Обработан' : '🆕 Новый';
             msg += `<b>#${q.id}</b> | ${q.name} | ${q.topic || 'без темы'} | ${statusLabel}\n`;
         });
-        msg += `\nВсего: ${questions.length} вопросов`;
+        msg += `\nВсего: ${allQuestions.length} вопросов`;
         await sendMessage(chatId, msg);
         return;
     }
 
     if (cmd === '/newquestions') {
-        const newQuestions = questions.filter(q => q.status !== 'done');
+        const allQuestions = getQuestions();
+        const newQuestions = allQuestions.filter(q => q.status !== 'done');
         if (newQuestions.length === 0) {
             await sendMessage(chatId, '✅ Нет необработанных вопросов!');
             return;
@@ -655,14 +684,13 @@ async function handleCommand(msg) {
             await sendMessage(chatId, 'Использование: /qreply ID ТЕКСТ');
             return;
         }
-        const question = questions.find(q => q.id === qId);
+        const question = getQuestionById(qId);
         if (!question) {
             await sendMessage(chatId, `Вопрос #${qId} не найден.`);
             return;
         }
         // Mark as done
-        question.status = 'done';
-        saveQuestions();
+        updateQuestionStatus(qId, 'done');
 
         // Send email to client
         if (question.email) {
@@ -730,8 +758,9 @@ const server = http.createServer(async (req, res) => {
 
     // Health check
     if (req.method === 'GET' && req.url === '/api/health') {
+        const orderCount = getOrders().length;
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', orders: orders.length, time: new Date().toISOString() }));
+        res.end(JSON.stringify({ status: 'ok', orders: orderCount, time: new Date().toISOString() }));
         return;
     }
 
@@ -753,7 +782,8 @@ const server = http.createServer(async (req, res) => {
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
-                console.log(`[ORDER] #${orders.length} ${data.name} - ${data.product}`);
+                const orderCount = getOrders().length;
+                console.log(`[ORDER] #${orderCount} ${data.name} - ${data.product}`);
             } catch(e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: e.message }));
