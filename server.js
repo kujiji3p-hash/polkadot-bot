@@ -27,6 +27,9 @@ const transporter = nodemailer.createTransport({
     host: 'smtp.yandex.ru',
     port: 465,
     secure: true,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
@@ -36,7 +39,7 @@ const transporter = nodemailer.createTransport({
 // Функция отправки email
 async function sendEmail(to, subject, html) {
     console.log(`[EMAIL] Попытка отправки на ${to}`);
-    console.log(`[EMAIL] USER: ${EMAIL_USER}, PASS: ${EMAIL_PASS ? '***' : 'НЕТ'}`);
+    console.log(`[EMAIL] USER: ${EMAIL_USER}, PASS: ${EMAIL_PASS ? 'есть' : 'НЕТ'}`);
     
     if (!to) {
         console.log('[EMAIL] Адрес получателя не указан');
@@ -47,16 +50,17 @@ async function sendEmail(to, subject, html) {
         return false;
     }
     try {
+        console.log('[EMAIL] Подключаюсь к SMTP...');
         const info = await transporter.sendMail({
             from: `"Polka Dot" <${EMAIL_USER}>`,
             to,
             subject,
             html
         });
-        console.log(`[EMAIL] Успешно отправлено на ${to}, ID: ${info.messageId}`);
+        console.log(`[EMAIL] Успешно! ID: ${info.messageId}`);
         return true;
     } catch(e) {
-        console.error('[EMAIL] Ошибка отправки:', e.message);
+        console.error('[EMAIL] ОШИБКА:', e.code || '', e.message);
         return false;
     }
 }
