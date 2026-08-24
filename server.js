@@ -111,6 +111,8 @@ db.exec(`
         product TEXT,
         quantity TEXT,
         message TEXT,
+        contact_method TEXT DEFAULT '',
+        contact_value TEXT DEFAULT '',
         status TEXT DEFAULT 'new',
         date TEXT
     )
@@ -123,10 +125,18 @@ db.exec(`
         email TEXT,
         topic TEXT,
         message TEXT,
+        contact_method TEXT DEFAULT '',
+        contact_value TEXT DEFAULT '',
         status TEXT DEFAULT 'new',
         date TEXT
     )
 `);
+
+// Миграция: добавляем колонки если их нет
+try { db.exec(`ALTER TABLE orders ADD COLUMN contact_method TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN contact_value TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE questions ADD COLUMN contact_method TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE questions ADD COLUMN contact_value TEXT DEFAULT ''`); } catch(e) {}
 
 // Функции для работы с заказами
 function getOrders() {
@@ -138,8 +148,8 @@ function getOrderById(id) {
 }
 
 function addOrder(data) {
-    const stmt = db.prepare('INSERT INTO orders (name, email, phone, product, quantity, message, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    return stmt.run(data.name || '', data.email || '', data.phone || '', data.product || '', data.quantity || '', data.message || '', 'new', new Date().toLocaleString('ru-RU'));
+    const stmt = db.prepare('INSERT INTO orders (name, email, phone, product, quantity, message, contact_method, contact_value, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    return stmt.run(data.name || '', data.email || '', data.phone || '', data.product || '', data.quantity || '', data.message || '', data.contact_method || '', data.contact_value || '', 'new', new Date().toLocaleString('ru-RU'));
 }
 
 function updateOrderStatus(id, status) {
@@ -156,8 +166,8 @@ function getQuestionById(id) {
 }
 
 function addQuestion(data) {
-    const stmt = db.prepare('INSERT INTO questions (name, email, topic, message, status, date) VALUES (?, ?, ?, ?, ?, ?)');
-    return stmt.run(data.name || '', data.email || '', data.topic || '', data.message || '', 'new', new Date().toLocaleString('ru-RU'));
+    const stmt = db.prepare('INSERT INTO questions (name, email, topic, message, contact_method, contact_value, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    return stmt.run(data.name || '', data.email || '', data.topic || '', data.message || '', data.contact_method || '', data.contact_value || '', 'new', new Date().toLocaleString('ru-RU'));
 }
 
 function updateQuestionStatus(id, status) {
@@ -221,7 +231,9 @@ async function sendOrderToAdmin(data) {
 
     const msg = `<b>🆕 Новый заказ #${orderId}</b>
 
-<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
+<b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
+${formatContactInfo(data.contact_method, data.contact_value)}
+<b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указан'}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
 ${escapeHtml(data.message) || ''}
@@ -251,6 +263,20 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;');
 }
 
+const CONTACT_METHOD_LABELS = {
+    email: 'Email',
+    instagram: 'Instagram',
+    telegram: 'Telegram',
+    viber: 'Viber',
+    whatsapp: 'WhatsApp'
+};
+
+function formatContactInfo(method, value) {
+    if (!method || !value) return '';
+    const label = CONTACT_METHOD_LABELS[method] || method;
+    return `<b>Связь:</b> ${label}: ${escapeHtml(value)}`;
+}
+
 async function sendQuestionToAdmin(data) {
     const result = addQuestion(data);
     const qId = result.lastInsertRowid;
@@ -267,7 +293,7 @@ async function sendQuestionToAdmin(data) {
     const msg = `<b>❓ Новый вопрос #${qId}</b>
 
 <b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
-<b>Email:</b> ${escapeHtml(data.email) || 'Не указано'}
+${formatContactInfo(data.contact_method, data.contact_value)}
 <b>Тема:</b> ${topicLabels[data.topic] || escapeHtml(data.topic) || 'Не указана'}
 <b>Вопрос:</b> ${escapeHtml(data.message) || 'Нет'}
 <b>Дата:</b> ${new Date().toLocaleString('ru-RU')}`;
@@ -317,7 +343,9 @@ async function handleCallbackQuery(callbackQuery) {
         const order = getOrderById(orderId);
         const orderEmail = order ? (order.email || '') : '';
         const orderProduct = order ? (order.product || '') : '';
-        writeLog(`[STATUS] Заказ #${orderId}, email из БД: '${orderEmail}', product: '${orderProduct}', order exists: ${!!order}`);
+        const orderContactMethod = order ? (order.contact_method || '') : '';
+        const orderContactValue = order ? (order.contact_value || '') : '';
+        writeLog(`[STATUS] Заказ #${orderId}, contact: '${orderContactMethod}': '${orderContactValue}', email: '${orderEmail}'`);
 
         // Update the message with new status
         const originalText = callbackQuery.message.text || callbackQuery.message.caption || '';
@@ -347,15 +375,17 @@ async function handleCallbackQuery(callbackQuery) {
         // Update order status in database
         updateOrderStatus(orderId, newStatus);
 
-        // Send email notification
-        writeLog(`[STATUS] Проверка email для заказа #${orderId}: '${orderEmail}', длина: ${orderEmail.length}, есть @: ${orderEmail.includes('@')}`);
-        if (orderEmail && orderEmail.length > 3 && orderEmail.includes('@')) {
-            const statusMessages = {
-                processing: 'Ваш заказ принят и обрабатывается.',
-                shipped: 'Ваш заказ отправлен!',
-                cancelled: 'Ваш заказ отменён.'
-            };
-            const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
+        // Send notification via selected contact method
+        const statusMessages = {
+            processing: 'Ваш заказ принят и обрабатывается.',
+            shipped: 'Ваш заказ отправлен!',
+            cancelled: 'Ваш заказ отменён.'
+        };
+        const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
+        const notifText = `Polka Dot — Обновление заказа\n\n${statusMessages[newStatus] || statusLabel}\n\nТовар: ${orderProduct}\nСтатус: ${statusClean}`;
+
+        if (orderContactMethod === 'email' && orderContactValue && orderContactValue.includes('@')) {
+            // Send email notification
             const emailHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -382,10 +412,46 @@ async function handleCallbackQuery(callbackQuery) {
                     </div>
                 </body>
                 </html>`;
-            const emailSent = await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
+            const emailSent = await sendEmail(orderContactValue, `Заказ - ${statusClean}`, emailHtml);
             writeLog(`[STATUS] Email результат для заказа #${orderId}: ${emailSent}`);
+        } else if (orderContactMethod === 'telegram' && orderContactValue) {
+            // Send Telegram notification to customer
+            try {
+                await sendMessage(orderContactValue, notifText);
+                writeLog(`[STATUS] Telegram отправлен для заказа #${orderId} на ${orderContactValue}`);
+            } catch(e) {
+                writeLog(`[STATUS] Ошибка Telegram для заказа #${orderId}: ${e.message}`);
+            }
+        } else if (orderContactMethod && orderContactValue) {
+            // For Instagram/Viber/WhatsApp — log for admin to respond manually
+            writeLog(`[STATUS] Заказ #${orderId}: клиент выбрал ${orderContactMethod} (${orderContactValue}). Уведомление отправлено админу в Telegram.`);
+            await sendMessage(CHAT_ID, `⚠️ Заказ #${orderId} обновлён: ${statusClean}\nКлиент выбрал ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь с клиентом вручную.`);
+        } else if (orderEmail && orderEmail.includes('@')) {
+            // Fallback to email if contact_method not set (old orders)
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">${statusMessages[newStatus] || statusLabel}</p>
+                            <table style="width:100%;margin:16px 0;border-collapse:collapse;">
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(orderProduct)}</td></tr>
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
+            await sendEmail(orderEmail, `Заказ - ${statusClean}`, emailHtml);
+            writeLog(`[STATUS] Fallback email отправлен для заказа #${orderId}`);
         } else {
-            writeLog(`[STATUS] Email НЕ отправлен для заказа #${orderId}: email='${orderEmail}'`);
+            writeLog(`[STATUS] У заказа #${orderId} нет контактных данных для уведомления`);
         }
     }
 
@@ -396,6 +462,8 @@ async function handleCallbackQuery(callbackQuery) {
         // Get question from database
         const question = getQuestionById(qId);
         const questionEmail = question ? (question.email || '') : '';
+        const questionContactMethod = question ? (question.contact_method || '') : '';
+        const questionContactValue = question ? (question.contact_value || '') : '';
 
         // Parse from message
         const originalText = callbackQuery.message.text || '';
@@ -414,8 +482,10 @@ async function handleCallbackQuery(callbackQuery) {
         // Update question status
         updateQuestionStatus(qId, 'done');
 
-        // Send email notification
-        if (questionEmail && questionEmail.includes('@')) {
+        // Send notification via selected contact method
+        const qNotifText = `Polka Dot — Ваш вопрос принят\n\nМы получили ваш вопрос и обрабатываем его. Ответ будет отправлен в ближайшее время.`;
+
+        if (questionContactMethod === 'email' && questionContactValue && questionContactValue.includes('@')) {
             const emailHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -436,8 +506,38 @@ async function handleCallbackQuery(callbackQuery) {
                     </div>
                 </body>
                 </html>`;
+            await sendEmail(questionContactValue, 'Ваш вопрос принят — Polka Dot', emailHtml);
+            writeLog(`[QDONE] Email отправлен на ${questionContactValue}`);
+        } else if (questionContactMethod === 'telegram' && questionContactValue) {
+            try {
+                await sendMessage(questionContactValue, qNotifText);
+                writeLog(`[QDONE] Telegram отправлен на ${questionContactValue}`);
+            } catch(e) {
+                writeLog(`[QDONE] Ошибка Telegram: ${e.message}`);
+            }
+        } else if (questionContactMethod && questionContactValue) {
+            writeLog(`[QDONE] Вопрос #${qId}: клиент выбрал ${questionContactMethod} (${questionContactValue}). Уведомление админу.`);
+            await sendMessage(CHAT_ID, `⚠️ Вопрос #${qId} обработан.\nКлиент выбрал ${CONTACT_METHOD_LABELS[questionContactMethod] || questionContactMethod}: ${questionContactValue}\nСвяжитесь с клиентом вручную.`);
+        } else if (questionEmail && questionEmail.includes('@')) {
+            // Fallback for old questions
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">Мы получили ваш вопрос и обрабатываем его.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
             await sendEmail(questionEmail, 'Ваш вопрос принят — Polka Dot', emailHtml);
-            writeLog(`[QDONE] Email отправлен на ${questionEmail}`);
+            writeLog(`[QDONE] Fallback email отправлен на ${questionEmail}`);
         }
     }
 
@@ -570,8 +670,11 @@ async function handleCommand(msg) {
         let msg = `<b>🔔 Необработанные заказы (${newOrders.length}):</b>\n\n`;
         newOrders.forEach(o => {
             const statusLabel = STATUS_LABELS[o.status] || o.status;
+            const contactInfo = o.contact_method && o.contact_value
+                ? `${CONTACT_METHOD_LABELS[o.contact_method] || o.contact_method}: ${o.contact_value}`
+                : (o.email || 'нет');
             msg += `<b>#${o.id}</b> | ${o.name} | ${o.product} | ${statusLabel}\n`;
-            msg += `  📞 ${o.phone || 'нет'} | 📧 ${o.email || 'нет'}\n\n`;
+            msg += `  📞 ${o.phone || 'нет'} | 📧 ${contactInfo}\n\n`;
         });
         await sendMessage(chatId, msg);
         return;
@@ -593,15 +696,18 @@ async function handleCommand(msg) {
         const statusLabel = STATUS_LABELS[status] || status;
         await sendMessage(chatId, `Статус заказа #${orderId} изменён на: <b>${statusLabel}</b>`);
 
-        // Send email notification to client
-        if (order.email) {
-            const statusMessages = {
-                new: 'Ваш заказ принят и ожидает обработки.',
-                processing: 'Ваш заказ обрабатывается.',
-                shipped: 'Ваш заказ отправлен!',
-                cancelled: 'Ваш заказ отменён.'
-            };
-            const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
+        // Send notification via selected contact method
+        const statusMessages = {
+            new: 'Ваш заказ принят и ожидает обработки.',
+            processing: 'Ваш заказ обрабатывается.',
+            shipped: 'Ваш заказ отправлен!',
+            cancelled: 'Ваш заказ отменён.'
+        };
+        const statusClean = statusLabel.replace(/^[^\s]+\s/, '');
+        const orderContactMethod = order.contact_method || '';
+        const orderContactValue = order.contact_value || '';
+
+        if (orderContactMethod === 'email' && orderContactValue && orderContactValue.includes('@')) {
             const emailHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -628,6 +734,35 @@ async function handleCommand(msg) {
                     </div>
                 </body>
                 </html>`;
+            await sendEmail(orderContactValue, `Заказ - ${statusClean}`, emailHtml);
+        } else if (orderContactMethod === 'telegram' && orderContactValue) {
+            try {
+                await sendMessage(orderContactValue, `Polka Dot — Обновление заказа\n\n${statusMessages[status] || statusLabel}\n\nТовар: ${order.product}\nСтатус: ${statusClean}`);
+            } catch(e) {}
+        } else if (orderContactMethod && orderContactValue) {
+            await sendMessage(CHAT_ID, `⚠️ Заказ #${orderId}: ${statusClean}\nКлиент: ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь вручную.`);
+        } else if (order.email && order.email.includes('@')) {
+            // Fallback for old orders
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Обновление по вашему заказу</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.5;">${statusMessages[status] || `Статус изменён: ${statusLabel}`}</p>
+                            <table style="width:100%;margin:16px 0;border-collapse:collapse;">
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(order.product)}</td></tr>
+                                <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
             await sendEmail(order.email, `Заказ - ${statusClean}`, emailHtml);
         }
         return;
@@ -645,11 +780,26 @@ async function handleCommand(msg) {
             await sendMessage(chatId, `Заказ #${orderId} не найден.`);
             return;
         }
-        if (order.email) {
+        const oContactMethod = order.contact_method || '';
+        const oContactValue = order.contact_value || '';
+
+        if (oContactMethod === 'email' && oContactValue && oContactValue.includes('@')) {
+            await sendEmail(oContactValue, 'Ответ от Polka Dot', `<p>${escapeHtml(replyText)}</p>`);
+            await sendMessage(chatId, `Ответ отправлен на ${oContactValue}`);
+        } else if (oContactMethod === 'telegram' && oContactValue) {
+            try {
+                await sendMessage(oContactValue, `Polka Dot — ${replyText}`);
+                await sendMessage(chatId, `Ответ отправлен в Telegram (${oContactValue})`);
+            } catch(e) {
+                await sendMessage(chatId, `Ошибка Telegram: ${e.message}`);
+            }
+        } else if (oContactMethod && oContactValue) {
+            await sendMessage(chatId, `Клиент: ${CONTACT_METHOD_LABELS[oContactMethod] || oContactMethod}: ${oContactValue}\nОтвет:\n${replyText}\n\nСкопируйте и отправьте вручную.`);
+        } else if (order.email && order.email.includes('@')) {
             await sendEmail(order.email, 'Ответ от Polka Dot', `<p>${escapeHtml(replyText)}</p>`);
             await sendMessage(chatId, `Ответ отправлен на ${order.email}`);
         } else {
-            await sendMessage(chatId, `У заказа #${orderId} нет email.`);
+            await sendMessage(chatId, `У заказа #${orderId} нет контактных данных.`);
         }
         return;
     }
@@ -720,8 +870,11 @@ async function handleCommand(msg) {
         let msg = `<b>📜 История заказов (стр. ${page}/${totalPages}):</b>\n\n`;
         pageOrders.forEach(o => {
             const statusLabel = STATUS_LABELS[o.status] || o.status;
+            const contactInfo = o.contact_method && o.contact_value
+                ? `${CONTACT_METHOD_LABELS[o.contact_method] || o.contact_method}: ${o.contact_value}`
+                : (o.email || 'нет');
             msg += `<b>#${o.id}</b> | ${o.date}\n`;
-            msg += `  Клиент: ${o.name} (${o.email || 'нет email'})\n`;
+            msg += `  Клиент: ${o.name} (${contactInfo})\n`;
             msg += `  Товар: ${o.product} x${o.quantity || 1}\n`;
             msg += `  Телефон: ${o.phone || 'нет'}\n`;
             msg += `  Статус: ${statusLabel}\n`;
@@ -762,7 +915,10 @@ async function handleCommand(msg) {
         }
         let msg = `<b>🔔 Необработанные вопросы (${newQuestions.length}):</b>\n\n`;
         newQuestions.forEach(q => {
-            msg += `<b>#${q.id}</b> | ${q.name} | ${q.email || 'нет email'}\n`;
+            const contactInfo = q.contact_method && q.contact_value
+                ? `${CONTACT_METHOD_LABELS[q.contact_method] || q.contact_method}: ${q.contact_value}`
+                : (q.email || 'нет');
+            msg += `<b>#${q.id}</b> | ${q.name} | ${contactInfo}\n`;
             msg += `  Тема: ${q.topic || 'нет'}\n`;
             msg += `  Вопрос: ${q.message || 'нет'}\n\n`;
         });
@@ -779,8 +935,10 @@ async function handleCommand(msg) {
         }
         const question = getQuestionById(qId);
         const questionEmail = question ? (question.email || '') : '';
+        const qContactMethod = question ? (question.contact_method || '') : '';
+        const qContactValue = question ? (question.contact_value || '') : '';
 
-        if (questionEmail && questionEmail.includes('@')) {
+        if (qContactMethod === 'email' && qContactValue && qContactValue.includes('@')) {
             const emailHtml = `
                 <!DOCTYPE html>
                 <html>
@@ -801,6 +959,39 @@ async function handleCommand(msg) {
                     </div>
                 </body>
                 </html>`;
+            const sent = await sendEmail(qContactValue, `Ответ на ваш вопрос — Polka Dot`, emailHtml);
+            if (sent) {
+                await sendMessage(chatId, `✅ Ответ на вопрос #${qId} отправлен на ${qContactValue}`);
+            } else {
+                await sendMessage(chatId, `❌ Не удалось отправить email на ${qContactValue}`);
+            }
+        } else if (qContactMethod === 'telegram' && qContactValue) {
+            try {
+                await sendMessage(qContactValue, `Polka Dot — Ответ на ваш вопрос:\n\n${replyText}`);
+                await sendMessage(chatId, `✅ Ответ на вопрос #${qId} отправлен в Telegram (${qContactValue})`);
+            } catch(e) {
+                await sendMessage(chatId, `❌ Не удалось отправить в Telegram: ${e.message}`);
+            }
+        } else if (qContactMethod && qContactValue) {
+            await sendMessage(chatId, `⚠️ Вопрос #${qId}: клиент выбрал ${CONTACT_METHOD_LABELS[qContactMethod] || qContactMethod}: ${qContactValue}\nОтвет:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную.`);
+        } else if (questionEmail && questionEmail.includes('@')) {
+            // Fallback for old questions
+            const emailHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;">
+                    <div style="max-width:600px;margin:0 auto;background:#fff;">
+                        <div style="background:#111;color:#fff;padding:24px;text-align:center;">
+                            <h1 style="margin:0;font-size:22px;letter-spacing:1px;">POLKA DOT</h1>
+                        </div>
+                        <div style="padding:28px 24px;">
+                            <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
+                            <p style="color:#444;font-size:15px;line-height:1.6;">${escapeHtml(replyText)}</p>
+                        </div>
+                    </div>
+                </body>
+                </html>`;
             const sent = await sendEmail(questionEmail, `Ответ на ваш вопрос — Polka Dot`, emailHtml);
             if (sent) {
                 await sendMessage(chatId, `✅ Ответ на вопрос #${qId} отправлен на ${questionEmail}`);
@@ -808,7 +999,7 @@ async function handleCommand(msg) {
                 await sendMessage(chatId, `❌ Не удалось отправить email на ${questionEmail}`);
             }
         } else {
-            await sendMessage(chatId, `⚠ У вопроса #${qId} нет email. Ответ:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную.`);
+            await sendMessage(chatId, `⚠ У вопроса #${qId} нет контактных данных. Ответ:\n${replyText}\n\nСкопируйте и отправьте клиенту вручную.`);
         }
         return;
     }
