@@ -10,6 +10,7 @@ const Database = require('better-sqlite3');
 // =====================
 const BOT_TOKEN = process.env.BOT_TOKEN || '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
 const CHAT_ID = process.env.CHAT_ID || '814292031';
+const CHAT_IDS = (process.env.CHAT_IDS || `${CHAT_ID},-5313154569`).split(',').map(s => s.trim()).filter(Boolean);
 const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, 'polkadot.db');
 
@@ -225,6 +226,16 @@ async function sendMessage(chatId, text, options = {}) {
     return result;
 }
 
+async function sendToAllChats(text, options = {}) {
+    for (const chatId of CHAT_IDS) {
+        try {
+            await sendMessage(chatId, text, options);
+        } catch(e) {
+            console.error(`Failed to send to ${chatId}:`, e.message);
+        }
+    }
+}
+
 async function sendOrderToAdmin(data) {
     const result = addOrder(data);
     const orderId = result.lastInsertRowid;
@@ -252,7 +263,7 @@ ${escapeHtml(data.message) || ''}
         ]
     };
 
-    return sendMessage(CHAT_ID, msg, { reply_markup: JSON.stringify(keyboard) });
+    return sendToAllChats(msg, { reply_markup: JSON.stringify(keyboard) });
 }
 
 function escapeHtml(value) {
@@ -307,7 +318,7 @@ ${formatContactInfo(data.contact_method, data.contact_value)}
         ]
     };
 
-    return sendMessage(CHAT_ID, msg, { reply_markup: JSON.stringify(keyboard) });
+    return sendToAllChats(msg, { reply_markup: JSON.stringify(keyboard) });
 }
 
 async function sendAutoReply(chatId, text) {
@@ -329,7 +340,7 @@ async function handleCallbackQuery(callbackQuery) {
     const chatId = callbackQuery.message.chat.id;
     const data = callbackQuery.data;
 
-    if (chatId.toString() !== CHAT_ID) return;
+    if (!CHAT_IDS.includes(chatId.toString())) return;
 
     if (data.startsWith('status_')) {
         const parts = data.split('_');
@@ -425,7 +436,7 @@ async function handleCallbackQuery(callbackQuery) {
         } else if (orderContactMethod && orderContactValue) {
             // For Instagram/Viber/WhatsApp — log for admin to respond manually
             writeLog(`[STATUS] Заказ #${orderId}: клиент выбрал ${orderContactMethod} (${orderContactValue}). Уведомление отправлено админу в Telegram.`);
-            await sendMessage(CHAT_ID, `⚠️ Заказ #${orderId} обновлён: ${statusClean}\nКлиент выбрал ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь с клиентом вручную.`);
+            await sendToAllChats(`⚠️ Заказ #${orderId} обновлён: ${statusClean}\nКлиент выбрал ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь с клиентом вручную.`);
         } else if (orderEmail && orderEmail.includes('@')) {
             // Fallback to email if contact_method not set (old orders)
             const emailHtml = `
@@ -517,7 +528,7 @@ async function handleCallbackQuery(callbackQuery) {
             }
         } else if (questionContactMethod && questionContactValue) {
             writeLog(`[QDONE] Вопрос #${qId}: клиент выбрал ${questionContactMethod} (${questionContactValue}). Уведомление админу.`);
-            await sendMessage(CHAT_ID, `⚠️ Вопрос #${qId} обработан.\nКлиент выбрал ${CONTACT_METHOD_LABELS[questionContactMethod] || questionContactMethod}: ${questionContactValue}\nСвяжитесь с клиентом вручную.`);
+            await sendToAllChats(`⚠️ Вопрос #${qId} обработан.\nКлиент выбрал ${CONTACT_METHOD_LABELS[questionContactMethod] || questionContactMethod}: ${questionContactValue}\nСвяжитесь с клиентом вручную.`);
         } else if (questionEmail && questionEmail.includes('@')) {
             // Fallback for old questions
             const emailHtml = `
@@ -558,7 +569,7 @@ async function handleCommand(msg) {
     const cmd = args[0].toLowerCase();
 
     // Только для админа
-    if (chatId.toString() !== CHAT_ID) {
+    if (!CHAT_IDS.includes(chatId.toString())) {
         // FAQ для обычных пользователей
         if (cmd === '/start') {
             await sendMessage(chatId, `Добро пожаловать в Polka Dot!
@@ -740,7 +751,7 @@ async function handleCommand(msg) {
                 await sendMessage(orderContactValue, `Polka Dot — Обновление заказа\n\n${statusMessages[status] || statusLabel}\n\nТовар: ${order.product}\nСтатус: ${statusClean}`);
             } catch(e) {}
         } else if (orderContactMethod && orderContactValue) {
-            await sendMessage(CHAT_ID, `⚠️ Заказ #${orderId}: ${statusClean}\nКлиент: ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь вручную.`);
+            await sendToAllChats(`⚠️ Заказ #${orderId}: ${statusClean}\nКлиент: ${CONTACT_METHOD_LABELS[orderContactMethod] || orderContactMethod}: ${orderContactValue}\nСвяжитесь вручную.`);
         } else if (order.email && order.email.includes('@')) {
             // Fallback for old orders
             const emailHtml = `
