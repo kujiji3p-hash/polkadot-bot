@@ -10,7 +10,7 @@ const Database = require('better-sqlite3');
 // =====================
 const BOT_TOKEN = process.env.BOT_TOKEN || '8604437652:AAF55ZfXKx4U_PmRyo1Ad4JIO_mZch27ElY';
 const CHAT_ID = process.env.CHAT_ID || '814292031';
-const CHAT_IDS = (process.env.CHAT_IDS || `${CHAT_ID},-5313154569`).split(',').map(s => s.trim()).filter(Boolean);
+const CHAT_IDS = (process.env.CHAT_IDS || `${CHAT_ID},-1004499556871`).split(',').map(s => s.trim()).filter(Boolean);
 const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, 'polkadot.db');
 
