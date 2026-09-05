@@ -138,6 +138,14 @@ try { db.exec(`ALTER TABLE orders ADD COLUMN contact_method TEXT DEFAULT ''`); }
 try { db.exec(`ALTER TABLE orders ADD COLUMN contact_value TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE questions ADD COLUMN contact_method TEXT DEFAULT ''`); } catch(e) {}
 try { db.exec(`ALTER TABLE questions ADD COLUMN contact_value TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN promo_code TEXT DEFAULT ''`); } catch(e) {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN discount INTEGER DEFAULT 0`); } catch(e) {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN total_price TEXT DEFAULT ''`); } catch(e) {}
+
+// Промокоды
+const PROMO_CODES = {
+    'start': { discount: 25, oneTime: true, used: new Set() }
+};
 
 // Функции для работы с заказами
 function getOrders() {
@@ -149,8 +157,8 @@ function getOrderById(id) {
 }
 
 function addOrder(data) {
-    const stmt = db.prepare('INSERT INTO orders (name, email, phone, product, quantity, message, contact_method, contact_value, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    return stmt.run(data.name || '', data.email || '', data.phone || '', data.product || '', data.quantity || '', data.message || '', data.contact_method || '', data.contact_value || '', 'new', new Date().toLocaleString('ru-RU'));
+    const stmt = db.prepare('INSERT INTO orders (name, email, phone, product, quantity, message, contact_method, contact_value, promo_code, discount, total_price, status, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    return stmt.run(data.name || '', data.email || '', data.phone || '', data.product || '', data.quantity || '', data.message || '', data.contact_method || '', data.contact_value || '', data.promo_code || '', data.discount || 0, data.total_price || '', 'new', new Date().toLocaleString('ru-RU'));
 }
 
 function updateOrderStatus(id, status) {
@@ -237,7 +245,23 @@ async function sendToAllChats(text, options = {}) {
 }
 
 async function sendOrderToAdmin(data) {
-    const result = addOrder(data);
+    // Validate promo code if provided
+    let promoInfo = '';
+    if (data.promo_code) {
+        const promo = PROMO_CODES[data.promo_code.toLowerCase()];
+        if (promo) {
+            if (promo.oneTime && promo.used.has(data.contact_value)) {
+                promoInfo = '\n⚠️ <b>Промокод уже был использован ранее!</b>';
+            } else {
+                promoInfo = `\n🎁 <b>Промокод:</b> ${data.promo_code} (-${promo.discount}%)`;
+                if (promo.oneTime) {
+                    promo.used.add(data.contact_value);
+                }
+            }
+        }
+    }
+
+    const result = addOrder({...data, discount: data.discount || 0, promo_code: data.promo_code || '', total_price: data.total_price || ''});
     const orderId = result.lastInsertRowid;
 
     const msg = `<b>🆕 Новый заказ #${orderId}</b>
@@ -247,6 +271,8 @@ ${formatContactInfo(data.contact_method, data.contact_value)}
 <b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указан'}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
+${data.total_price ? `<b>Сумма:</b> ${escapeHtml(data.total_price)}` : ''}
+${promoInfo}
 ${escapeHtml(data.message) || ''}
 <b>Статус:</b> 🆕 Новый
 <b>Дата:</b> ${new Date().toLocaleString('ru-RU')}`;
