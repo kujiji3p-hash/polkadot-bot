@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
@@ -18,9 +19,10 @@ const DB_PATH = path.join(__dirname, 'polkadot.db');
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@polkadot.by';
 
-// Настройки WEBPAY
-const WEBPAY_MERCHANT_TOKEN = process.env.WEBPAY_MERCHANT_TOKEN || '';
-const WEBPAY_API_URL = process.env.WEBPAY_API_URL || 'https://payment.webpay.by/api/v1/invoices';
+// Настройки WEBPAY (form-based по документации webpay.by)
+const WEBPAY_STORE_ID = process.env.WEBPAY_STORE_ID || '541141518';
+const WEBPAY_SECRET_KEY = process.env.WEBPAY_SECRET_KEY || 'sunsetcor1';
+const WEBPAY_PAYMENT_URL = process.env.WEBPAY_PAYMENT_URL || 'https://payment.webpay.by';
 const SITE_URL = process.env.SITE_URL || 'https://polkadot.by';
 
 if (!BOT_TOKEN || !CHAT_ID) {
@@ -1078,41 +1080,56 @@ async function pollUpdates() {
 }
 
 // =====================
-// WEBPAY API HELPER
+// WEBPAY HELPERS (form-based по документации webpay.by)
 // =====================
-function webpayApiRequest(method, path, data) {
-    return new Promise((resolve, reject) => {
-        const postData = data ? JSON.stringify(data) : null;
-        const url = new URL(WEBPAY_API_URL);
+function generateWebpaySignature(seed, storeId, orderNum, test, currency, total, secret) {
+    const str = String(seed) + String(storeId) + String(orderNum) + String(test) + String(currency) + String(total) + String(secret);
+    return crypto.createHash('sha1').update(str).digest('hex');
+}
 
-        const options = {
-            hostname: url.hostname,
-            port: 443,
-            path: url.pathname + path,
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${WEBPAY_MERCHANT_TOKEN}`,
-                'Accept': 'application/json'
-            }
-        };
-        if (postData) {
-            options.headers['Content-Length'] = Buffer.byteLength(postData);
-        }
+function buildWebpayForm(orderId, total, product, email) {
+    const seed = Date.now();
+    const storeId = WEBPAY_STORE_ID;
+    const secret = WEBPAY_SECRET_KEY;
+    const currency = 'BYN';
+    const test = 0;
+    const sig = generateWebpaySignature(seed, storeId, orderId, test, currency, total, secret);
+    const returnOk = SITE_URL + '/payment-success.html?order=' + encodeURIComponent(orderId);
+    const returnCancel = SITE_URL + '/payment-cancel.html?order=' + encodeURIComponent(orderId);
+    const notifyUrl = SITE_URL + '/.netlify/functions/notify'; // не используется на Surge, но WEBPAY может позвонить на Render
 
-        const req = https.request(options, (res) => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                try { resolve(JSON.parse(body)); }
-                catch(e) { resolve(body); }
-            });
-        });
-        req.on('error', reject);
-        req.setTimeout(15000, () => { req.destroy(); reject(new Error('WEBPAY timeout')); });
-        if (postData) req.write(postData);
-        req.end();
+    let itemsHtml = '';
+    const productNames = product.split(',');
+    productNames.forEach(function(p, i) {
+        p = p.trim();
+        const m = p.match(/(.+?)\s*x(\d+)$/);
+        const name = m ? m[1].trim() : p;
+        const qty = m ? parseInt(m[2]) : 1;
+        itemsHtml += '<input type="hidden" name="wsb_invoice_item_name[' + i + ']" value="' + escapeHtmlAttr(name) + '">' +
+                     '<input type="hidden" name="wsb_invoice_item_quantity[' + i + ']" value="' + qty + '">' +
+                     '<input type="hidden" name="wsb_invoice_item_price[' + i + ']" value="' + (total / qty).toFixed(2) + '">';
     });
+
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Перенаправление на оплату...</title></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">' +
+        '<div style="text-align:center"><p style="font-size:18px;color:#555;">Перенаправление на страницу оплаты...</p>' +
+        '<form id="wp" action="' + WEBPAY_PAYMENT_URL + '" method="post">' +
+        '<input type="hidden" name="*scart">' +
+        '<input type="hidden" name="wsb_version" value="2">' +
+        '<input type="hidden" name="wsb_language_id" value="russian">' +
+        '<input type="hidden" name="wsb_storeid" value="' + storeId + '">' +
+        '<input type="hidden" name="wsb_order_num" value="' + orderId + '">' +
+        '<input type="hidden" name="wsb_currency_id" value="' + currency + '">' +
+        '<input type="hidden" name="wsb_seed" value="' + seed + '">' +
+        '<input type="hidden" name="wsb_test" value="' + test + '">' +
+        '<input type="hidden" name="wsb_total" value="' + total.toFixed(2) + '">' +
+        '<input type="hidden" name="wsb_return_url" value="' + escapeHtmlAttr(returnOk) + '">' +
+        '<input type="hidden" name="wsb_cancel_return_url" value="' + escapeHtmlAttr(returnCancel) + '">' +
+        '<input type="hidden" name="wsb_email" value="' + escapeHtmlAttr(email || '') + '">' +
+        itemsHtml +
+        '<input type="hidden" name="wsb_signature" value="' + sig + '">' +
+        '</form>' +
+        '<script>document.getElementById("wp").submit();</script>' +
+        '</div></body></html>';
 }
 
 // =====================
@@ -1199,77 +1216,44 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =====================
-    // WEBPAY — Создание счёта для оплаты
+    // WEBPAY — Создание счёта и редирект на оплату (form-based)
     // =====================
     if (req.method === 'POST' && req.url === '/api/webpay/create') {
-        if (!WEBPAY_MERCHANT_TOKEN) {
-            res.writeHead(503, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'WEBPAY не подключён. Мерчант-токен не задан.' }));
-            return;
-        }
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
                 const data = JSON.parse(body);
                 const orderId = 'PD-' + Date.now();
-                const amount = Math.round(parseFloat(data.total) * 100); // в копейках
+                const amount = Math.round(parseFloat(data.total) * 100) / 100;
 
-                const invoiceData = {
-                    amount: amount,
-                    currency: 933, // BYN
-                    description: `Polka Dot — Заказ ${orderId}: ${data.product}`,
+                writeLog(`[WEBPAY] Создание заказа: ${orderId}, сумма: ${amount} BYN`);
+
+                addOrder({
+                    name: data.name || '',
                     email: data.email || '',
-                    link_success: `${SITE_URL}/cart.html?payment=success&order=${orderId}`,
-                    link_cancel: `${SITE_URL}/cart.html?payment=cancel&order=${orderId}`,
-                    ttl: 1440, // 24 часа на оплату
-                    order_id: orderId
-                };
+                    phone: data.phone || '',
+                    product: data.product || '',
+                    quantity: data.quantity || '1',
+                    message: `Онлайн-оплата. WEBPAY.\n${data.message || ''}`,
+                    contact_method: data.contact_method || '',
+                    contact_value: data.contact_value || '',
+                    promo_code: data.promo_code || '',
+                    discount: data.discount || 0,
+                    total_price: data.total_price || `${amount} BYN`
+                });
 
-                writeLog(`[WEBPAY] Создание счёта: ${orderId}, сумма: ${data.total} BYN`);
+                await sendToAllChats(
+                    `💳 <b>Новый онлайн-заказ ${orderId}</b>\n\n` +
+                    `<b>Сумма:</b> ${amount} BYN\n` +
+                    `<b>Товар:</b> ${escapeHtml(data.product)}\n` +
+                    `<b>Имя:</b> ${escapeHtml(data.name || data.contact_value || 'N/A')}\n` +
+                    `<b>Статус:</b> Ожидает оплаты`
+                );
 
-                const result = await webpayApiRequest('POST', '/invoices', invoiceData);
-
-                if (result && result.id) {
-                    writeLog(`[WEBPAY] Счёт создан: ${result.id}`);
-
-                    // Сохраняем заказ
-                    addOrder({
-                        name: data.name || '',
-                        email: data.email || '',
-                        phone: data.phone || '',
-                        product: data.product || '',
-                        quantity: data.quantity || '1',
-                        message: `Онлайн-оплата. Счёт WEBPAY: ${result.id}\n${data.message || ''}`,
-                        contact_method: data.contact_method || '',
-                        contact_value: data.contact_value || '',
-                        promo_code: data.promo_code || '',
-                        discount: data.discount || 0,
-                        total_price: data.total_price || `${data.total} BYN`
-                    });
-
-                    // Уведомление в Telegram
-                    await sendToAllChats(
-                        `💳 <b>Новый онлайн-заказ ${orderId}</b>\n\n` +
-                        `<b>Сумма:</b> ${data.total} BYN\n` +
-                        `<b>Товар:</b> ${escapeHtml(data.product)}\n` +
-                        `<b>Имя:</b> ${escapeHtml(data.name)}\n` +
-                        `<b>WEBPAY ID:</b> ${result.id}\n` +
-                        `<b>Статус:</b> Ожидает оплаты`
-                    );
-
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        success: true,
-                        payment_url: `https://payment.webpay.by/${result.id}`,
-                        invoice_id: result.id,
-                        order_id: orderId
-                    }));
-                } else {
-                    writeLog(`[WEBPAY] Ошибка: ${JSON.stringify(result)}`);
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ success: false, error: 'WEBPAY: ошибка создания счёта', details: result }));
-                }
+                const formHtml = buildWebpayForm(orderId, amount, data.product || 'Заказ', data.email || '');
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(formHtml);
             } catch(e) {
                 writeLog(`[WEBPAY] Ошибка: ${e.message}`);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1279,7 +1263,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // WEBPAY Callback — уведомление об оплате
+    // WEBPAY Callback — уведомление об оплате (нотификатор)
     if (req.method === 'POST' && req.url === '/api/webpay/callback') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -1288,17 +1272,24 @@ const server = http.createServer(async (req, res) => {
                 const data = JSON.parse(body);
                 writeLog(`[WEBPAY CALLBACK] ${JSON.stringify(data)}`);
 
-                if (data.status === 'successful' || data.status === 'paid') {
+                const status = (data.status || '').toLowerCase();
+                const invoiceId = data.invoice_id || data.webpayInvoiceId || data.id || 'N/A';
+                const orderId = data.order_id || data.resourceOrderNumber || 'N/A';
+                const amount = data.amount || data.total || 'N/A';
+
+                if (status === 'successful' || status === 'paid' || status === 'completed') {
                     await sendToAllChats(
                         `✅ <b>Оплата получена!</b>\n\n` +
-                        `<b>Счёт:</b> ${data.invoice_id || data.id || 'N/A'}\n` +
-                        `<b>Сумма:</b> ${data.amount || 'N/A'}\n` +
+                        `<b>Заказ:</b> ${orderId}\n` +
+                        `<b>Счёт WEBPAY:</b> ${invoiceId}\n` +
+                        `<b>Сумма:</b> ${amount} BYN\n` +
                         `<b>Статус:</b> Оплачен`
                     );
-                } else {
+                } else if (status) {
                     await sendToAllChats(
-                        `⚠️ <b>Статус оплаты:</b> ${data.status || 'unknown'}\n` +
-                        `<b>Счёт:</b> ${data.invoice_id || data.id || 'N/A'}`
+                        `⚠️ <b>Статус оплаты:</b> ${status}\n` +
+                        `<b>Заказ:</b> ${orderId}\n` +
+                        `<b>Счёт:</b> ${invoiceId}`
                     );
                 }
 
