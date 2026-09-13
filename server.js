@@ -445,7 +445,7 @@ async function handleCallbackQuery(callbackQuery) {
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(orderProduct)}</td></tr>
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
                             </table>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot.nails@yandex.ru</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot-nails@outlook.com</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
@@ -540,7 +540,7 @@ async function handleCallbackQuery(callbackQuery) {
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
                             <p style="color:#444;font-size:15px;line-height:1.5;">Мы получили ваш вопрос и обрабатываем его. Ответ будет отправлен на этот email в ближайшее время.</p>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">По срочным вопросам: polkadot.nails@yandex.ru</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">По срочным вопросам: polkadot-nails@outlook.com</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
@@ -767,7 +767,7 @@ async function handleCommand(msg) {
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;border-bottom:1px solid #eee;">Товар</td><td style="padding:8px 0;color:#222;font-size:13px;border-bottom:1px solid #eee;">${escapeHtml(order.product)}</td></tr>
                                 <tr><td style="padding:8px 0;color:#888;font-size:13px;">Статус</td><td style="padding:8px 0;color:#222;font-size:13px;">${statusLabel}</td></tr>
                             </table>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot.nails@yandex.ru</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Если у вас есть вопросы, напишите нам на почту: polkadot-nails@outlook.com</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
@@ -993,7 +993,7 @@ async function handleCommand(msg) {
                         <div style="padding:28px 24px;">
                             <h2 style="color:#222;font-size:18px;margin:0 0 12px;">Ответ на ваш вопрос</h2>
                             <p style="color:#444;font-size:15px;line-height:1.6;">${escapeHtml(replyText)}</p>
-                            <p style="color:#666;font-size:13px;margin-top:24px;">Есть ещё вопросы? Напишите нам: polkadot.nails@yandex.ru</p>
+                            <p style="color:#666;font-size:13px;margin-top:24px;">Есть ещё вопросы? Напишите нам: polkadot-nails@outlook.com</p>
                         </div>
                         <div style="background:#f9f9f9;padding:16px 24px;text-align:center;border-top:1px solid #eee;">
                             <p style="color:#aaa;font-size:11px;margin:0;">ИП Колос Е.Г. | г. Мозырь, б-р Дружбы 2</p>
