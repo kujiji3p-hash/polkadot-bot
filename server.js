@@ -307,6 +307,15 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;');
 }
 
+function escapeHtmlAttr(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 const CONTACT_METHOD_LABELS = {
     email: 'Email',
     instagram: 'Instagram',
