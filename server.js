@@ -279,6 +279,7 @@ ${formatContactInfo(data.contact_method, data.contact_value)}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
 ${data.total_price ? `<b>Сумма:</b> ${escapeHtml(data.total_price)}` : ''}
+${data.user_registered ? '<b>👤 Пользователь:</b> ✅ Зарегистрирован' : '<b>👤 Пользователь:</b> ❌ Не зарегистрирован'}
 ${promoInfo}
 ${escapeHtml(data.message) || ''}
 <b>Статус:</b> 🆕 Новый
@@ -291,6 +292,7 @@ ${escapeHtml(data.message) || ''}
                 { text: '📦 Отправлен', callback_data: `status_${orderId}_shipped` }
             ],
             [
+                { text: '⭐ Начислить баллы', callback_data: `points_${orderId}` },
                 { text: '❌ Отменить', callback_data: `status_${orderId}_cancelled` }
             ]
         ]
@@ -383,6 +385,28 @@ async function handleCallbackQuery(callbackQuery) {
     const data = callbackQuery.data;
 
     if (!CHAT_IDS.includes(chatId.toString())) return;
+
+    if (data.startsWith('points_')) {
+        const orderId = parseInt(data.split('_')[1]);
+        const order = getOrderById(orderId);
+        if (!order) {
+            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Заказ не найден' });
+            return;
+        }
+        if (!data.user_registered) {
+            await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Пользователь не зарегистрирован — начисление невозможно' });
+            return;
+        }
+        const totalStr = order.total_price || order.message || '0';
+        const totalMatch = totalStr.match(/(\d+)/);
+        const total = totalMatch ? parseInt(totalMatch[1]) : 0;
+        const points = Math.floor(total * 0.05);
+
+        await telegramAPI('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `Начислено ${points} баллов за заказ #${orderId}` });
+        await sendToAllChats(`⭐ <b>Баллы начислены!</b>\n\nЗаказ #${orderId}: +${points} баллов\nСумма: ${total} BYN (5%)`);
+        writeLog(`[POINTS] Начислено ${points} баллов за заказ #${orderId}`);
+        return;
+    }
 
     if (data.startsWith('status_')) {
         const parts = data.split('_');
