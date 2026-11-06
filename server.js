@@ -151,7 +151,8 @@ try { db.exec(`ALTER TABLE orders ADD COLUMN total_price TEXT DEFAULT ''`); } ca
 
 // Промокоды
 const PROMO_CODES = {
-    'start': { discount: 25, oneTime: true, used: new Set() }
+    'start': { discount: 25, oneTime: true, used: new Set() },
+    'inter': { discount: 15, oneTime: false }
 };
 
 // Функции для работы с заказами
@@ -278,7 +279,7 @@ ${formatContactInfo(data.contact_method, data.contact_value)}
 <b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указан'}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
 <b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
-${data.total_price ? `<b>Сумма:</b> ${escapeHtml(data.total_price)}` : ''}
+${data.price_before_discount ? `<b>Цена без скидки:</b> ${escapeHtml(data.price_before_discount)}\n` : ''}${data.price_after_discount ? `<b>Цена со скидкой:</b> ${escapeHtml(data.price_after_discount)}\n` : ''}${!data.price_before_discount && data.total_price ? `<b>Сумма:</b> ${escapeHtml(data.total_price)}` : ''}
 ${data.user_registered ? '<b>👤 Пользователь:</b> ✅ Зарегистрирован' : '<b>👤 Пользователь:</b> ❌ Не зарегистрирован'}
 ${promoInfo}
 ${escapeHtml(data.message) || ''}
