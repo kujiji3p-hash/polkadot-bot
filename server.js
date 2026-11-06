@@ -276,11 +276,11 @@ async function sendOrderToAdmin(data) {
 
 <b>Имя:</b> ${escapeHtml(data.name) || 'Не указано'}
 ${formatContactInfo(data.contact_method, data.contact_value)}
-<b>Телефон:</b> ${escapeHtml(data.phone) || 'Не указан'}
+${data.phone ? '<b>Телефон:</b> ' + escapeHtml(data.phone) + '\n' : ''}
 <b>Товар:</b> ${escapeHtml(data.product) || 'Не указано'}
-<b>Количество:</b> ${escapeHtml(data.quantity) || '1'}
+${data.quantity && data.quantity !== '1' ? '<b>Кол-во:</b> ' + escapeHtml(data.quantity) + '\n' : ''}
 ${data.price_before_discount ? `<b>Цена без скидки:</b> ${escapeHtml(data.price_before_discount)}\n` : ''}${data.price_after_discount ? `<b>Цена со скидкой:</b> ${escapeHtml(data.price_after_discount)}\n` : ''}${!data.price_before_discount && data.total_price ? `<b>Сумма:</b> ${escapeHtml(data.total_price)}` : ''}
-${data.user_registered ? '<b>👤 Пользователь:</b> ✅ Зарегистрирован' : '<b>👤 Пользователь:</b> ❌ Не зарегистрирован'}
+${data.user_registered ? '👤 Зарегистрирован\n' : ''}
 ${promoInfo}
 ${escapeHtml(data.message) || ''}
 <b>Статус:</b> 🆕 Новый
